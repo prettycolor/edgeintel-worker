@@ -293,10 +293,12 @@ Add bounded AI value without making AI the system of record.
 - hosted provider integration through AI Gateway
 - optional self-hosted model path behind HTTPS
 - evidence-bounded summaries or recommendation explanations
+- setup documentation that is fast to follow and easy to mirror into a public wiki
 
 ### Concrete work
 
 - Build a provider client that only operates on persisted findings and summaries.
+- Add an inference capabilities surface so operators can see which hosted and local routes are configured.
 - Start with one low-risk use case:
   - recommendation explanation polishing
   - executive summary drafting
@@ -308,11 +310,13 @@ Add bounded AI value without making AI the system of record.
   - no uncontrolled raw crawl spam
 - Add hosted provider path first.
 - Add Ollama/Gemma4 only through an HTTPS-exposed endpoint or tunnel-backed gateway, never `localhost`.
+- Document the local-model path with Cloudflare Tunnel plus optional Access service tokens so higher-end engineers can use self-hosted compute without losing production safety.
 
 ### Acceptance criteria
 
 - AI output is clearly grounded and optional.
 - The system still works fully when AI is unavailable.
+- A new engineer can configure either a hosted model or a Tunnel-backed local model by following the repo docs.
 
 ## Phase 7: Demo And Interview Layer
 

@@ -4,11 +4,19 @@
 # Optional AI Gateway bearer token.
 AI_GATEWAY_TOKEN=
 
+# Optional upstream provider API key when AI Gateway is not using BYOK internally.
+AI_UPSTREAM_API_KEY=
+
 # Optional Browser Rendering REST token.
 BROWSER_RENDERING_API_TOKEN=
 
 # Optional Cloudflare account identifier for account-scoped helpers.
 CLOUDFLARE_ACCOUNT_ID=
 
-# Optional override if you expose a self-hosted model or gateway over HTTPS.
+# Optional self-hosted model path. This must be HTTPS in deployed Worker use.
 LOCAL_MODEL_GATEWAY_URL=
+LOCAL_MODEL_MODEL=
+LOCAL_MODEL_API_KEY=
+LOCAL_MODEL_ACCESS_CLIENT_ID=
+LOCAL_MODEL_ACCESS_CLIENT_SECRET=
+LOCAL_MODEL_AI_GATEWAY_PROVIDER=

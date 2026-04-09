@@ -10,6 +10,10 @@ Cloudflare-native domain posture and remediation engine for the `hostingtool.dev
   to manage hourly-to-weekly scheduled rescans
 - `GET /api/domains/:domain/latest` and `GET /api/domains/:domain/history`
   for latest posture and diff-aware run history
+- `GET /api/inference/capabilities` to inspect the configured hosted and
+  local-model inference routes
+- `POST /api/scans/:scanRunId/ai-brief` to generate an evidence-bounded AI
+  brief from persisted findings and recommendations
 - Durable Object job coordination with job snapshots and event streaming
 - Workflow-driven orchestration that fans out stateless scan work through Cloudflare Queues
 - Scheduled watch processing through an hourly cron trigger
@@ -34,6 +38,11 @@ Cloudflare-native domain posture and remediation engine for the `hostingtool.dev
   - blocker tracking
   - evidence references
   - executive and technical summaries
+- Hybrid inference scaffolding with:
+  - AI Gateway binding or HTTPS endpoint support for hosted models
+  - OpenAI-compatible HTTPS support for self-hosted Ollama/Gemma endpoints
+  - Access header support for Tunnel-protected local-model routes
+  - grounded Markdown brief generation that never treats AI as source-of-truth
 
 ## Layout
 
@@ -81,14 +90,28 @@ Remote Browser Rendering is optional. If you want rendered markdown and screensh
 
 AI Gateway is optional in this initial slice. The scaffold reserves:
 
+- `AI_GATEWAY_ID`
 - `AI_GATEWAY_BASE_URL`
 - `AI_GATEWAY_TOKEN`
 - `AI_GATEWAY_MODEL`
 - `AI_GATEWAY_PROVIDER`
+- `AI_UPSTREAM_API_KEY`
+- `AI_INFERENCE_DEFAULT_ROUTE`
+
+If you use `AI_GATEWAY_BASE_URL`, set it to the HTTPS provider or route base that
+EdgeIntel should call before `/chat/completions`, not just a generic account URL.
 
 ## Ollama / Gemma4
 
-Deployed Workers cannot call `localhost` or private RFC1918 addresses. If you want Ollama or Gemma4 in the production architecture, expose it through a controlled HTTPS endpoint, ideally behind Cloudflare Tunnel, and route it as a provider behind AI Gateway or a dedicated gateway service.
+Deployed Workers cannot call `localhost` or private RFC1918 addresses. If you
+want Ollama or Gemma4 in the production architecture, expose it through a
+controlled HTTPS endpoint, ideally behind Cloudflare Tunnel, and either:
+
+- call it directly as an OpenAI-compatible HTTPS endpoint
+- route it through AI Gateway as a custom or routed provider
+
+Phase 6 now includes the provider abstraction and setup documentation for this
+path. Start with [docs/hybrid-inference.md](./docs/hybrid-inference.md).
 
 ## Current Scope
 
@@ -105,7 +128,7 @@ What is intentionally not here yet:
 - automatic Cloudflare zone mutation
 - private-network or raw port probing
 - deep authenticated crawl flows
-- advanced AI-generated summaries as a hard dependency
+- AI as a hard dependency for scan completion
 
 ## Roadmap
 

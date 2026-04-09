@@ -11,6 +11,9 @@
   "browser": {
     "binding": "BROWSER"
   },
+  "ai": {
+    "binding": "AI"
+  },
   "triggers": {
     "crons": ["0 * * * *"]
   },
@@ -18,9 +21,11 @@
     "SCAN_BATCH_LIMIT": "10",
     "SCAN_QUEUE_NAME": "edgeintel-scan",
     "ARTIFACT_QUEUE_NAME": "edgeintel-artifacts",
+    "AI_GATEWAY_ID": "",
     "AI_GATEWAY_BASE_URL": "",
     "AI_GATEWAY_MODEL": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
     "AI_GATEWAY_PROVIDER": "workers-ai",
+    "AI_INFERENCE_DEFAULT_ROUTE": "hosted",
     "BROWSER_RENDERING_REST_BASE_URL": ""
   },
   "d1_databases": [

@@ -13,11 +13,15 @@ export type Env = Omit<
   | "SCAN_BATCH_LIMIT"
   | "SCAN_QUEUE_NAME"
   | "ARTIFACT_QUEUE_NAME"
+  | "AI"
   | "AI_GATEWAY_BASE_URL"
+  | "AI_GATEWAY_ID"
   | "AI_GATEWAY_MODEL"
   | "AI_GATEWAY_PROVIDER"
+  | "AI_INFERENCE_DEFAULT_ROUTE"
   | "BROWSER_RENDERING_REST_BASE_URL"
 > & {
+  AI: Ai;
   SCAN_QUEUE: Queue<ScanQueueMessage>;
   ARTIFACT_QUEUE: Queue<ArtifactQueueMessage>;
   SCAN_WORKFLOW: Workflow<ScanWorkflowParams>;
@@ -26,13 +30,21 @@ export type Env = Omit<
   SCAN_QUEUE_NAME: string;
   ARTIFACT_QUEUE_NAME: string;
   AI_GATEWAY_BASE_URL: string;
+  AI_GATEWAY_ID: string;
   AI_GATEWAY_MODEL: string;
   AI_GATEWAY_PROVIDER: string;
+  AI_INFERENCE_DEFAULT_ROUTE: string;
   BROWSER_RENDERING_REST_BASE_URL: string;
   AI_GATEWAY_TOKEN?: string;
+  AI_UPSTREAM_API_KEY?: string;
   BROWSER_RENDERING_API_TOKEN?: string;
   CLOUDFLARE_ACCOUNT_ID?: string;
   LOCAL_MODEL_GATEWAY_URL?: string;
+  LOCAL_MODEL_MODEL?: string;
+  LOCAL_MODEL_API_KEY?: string;
+  LOCAL_MODEL_ACCESS_CLIENT_ID?: string;
+  LOCAL_MODEL_ACCESS_CLIENT_SECRET?: string;
+  LOCAL_MODEL_AI_GATEWAY_PROVIDER?: string;
 };
 
 export type WorkflowClass = typeof EdgeIntelScanWorkflow;

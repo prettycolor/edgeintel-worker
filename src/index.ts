@@ -34,7 +34,6 @@ import {
   methodNotAllowed,
   notFound,
   safeJsonParse,
-  textResponse,
 } from "./lib/utils";
 import {
   bundleHasModuleFailures,
@@ -50,11 +49,16 @@ import {
   renderMarkdownExport,
   renderTerraformExport,
 } from "./lib/exports";
+import {
+  buildAiBriefArtifactKey,
+  generateAiBrief,
+  getInferenceCapabilities,
+} from "./lib/inference";
 import type {
+  AiBriefRequestBody,
   ArtifactQueueMessage,
   DomainWatchRequestBody,
   ExportFormat,
-  PersistedRecommendation,
   ScanQueueMessage,
   ScanRequestBody,
   ScanWorkflowParams,
@@ -231,11 +235,10 @@ async function handleGetJob(env: Env, jobId: string): Promise<Response> {
   });
 }
 
-async function handleGetScan(env: Env, scanRunId: string): Promise<Response> {
-  const scanContext = await getScanContext(env, scanRunId);
-  if (!scanContext) return notFound("Scan run not found.");
-
-  return jsonResponse({
+function serializeScanContext(
+  scanContext: NonNullable<Awaited<ReturnType<typeof getScanContext>>>,
+) {
+  return {
     run: scanContext.run,
     resultBundle: safeJsonParse(scanContext.run.rawResultJson, null),
     findings: scanContext.findings,
@@ -252,7 +255,14 @@ async function handleGetScan(env: Env, scanRunId: string): Promise<Response> {
       prerequisites: JSON.parse(recommendation.prerequisitesJson),
       exportPayload: JSON.parse(recommendation.exportJson),
     })),
-  });
+  };
+}
+
+async function handleGetScan(env: Env, scanRunId: string): Promise<Response> {
+  const scanContext = await getScanContext(env, scanRunId);
+  if (!scanContext) return notFound("Scan run not found.");
+
+  return jsonResponse(serializeScanContext(scanContext));
 }
 
 async function handleDomainHistory(env: Env, domainParam: string): Promise<Response> {
@@ -290,24 +300,13 @@ async function handleLatestDomain(env: Env, domainParam: string): Promise<Respon
 
   return jsonResponse({
     domain,
-    latest: {
-      run: scanContext.run,
-      resultBundle: safeJsonParse(scanContext.run.rawResultJson, null),
-      findings: scanContext.findings,
-      artifacts: scanContext.artifacts.map((artifact) => ({
-        ...artifact,
-        metadata: JSON.parse(artifact.metadataJson),
-      })),
-      recommendations: scanContext.recommendations.map((recommendation) => ({
-        ...recommendation,
-        blockedBy: JSON.parse(recommendation.blockedByJson),
-        evidenceRefs: JSON.parse(recommendation.evidenceJson),
-        technicalSummary: recommendation.technicalSummary,
-        executiveSummary: recommendation.executiveSummary,
-        prerequisites: JSON.parse(recommendation.prerequisitesJson),
-        exportPayload: JSON.parse(recommendation.exportJson),
-      })),
-    },
+    latest: serializeScanContext(scanContext),
+  });
+}
+
+async function handleInferenceCapabilities(env: Env): Promise<Response> {
+  return jsonResponse({
+    inference: getInferenceCapabilities(env),
   });
 }
 
@@ -449,6 +448,88 @@ async function handleCreateExport(
     },
     { status: 201 },
   );
+}
+
+async function handleCreateAiBrief(
+  request: Request,
+  env: Env,
+  scanRunId: string,
+): Promise<Response> {
+  const scanContext = await getScanContext(env, scanRunId);
+  if (!scanContext) return notFound("Scan run not found.");
+
+  let body: AiBriefRequestBody = {};
+  if (request.headers.get("content-type")?.includes("application/json")) {
+    body = (await request.json().catch(() => ({}))) as AiBriefRequestBody;
+  }
+
+  try {
+    const brief = await generateAiBrief(env, scanContext, body);
+    const artifactId = crypto.randomUUID();
+    const objectKey = buildAiBriefArtifactKey(scanContext.run, brief);
+
+    await env.EDGE_ARTIFACTS.put(objectKey, brief.content, {
+      httpMetadata: {
+        contentType: "text/markdown; charset=utf-8",
+      },
+    });
+
+    await insertArtifact(env, scanRunId, {
+      id: artifactId,
+      kind: "ai-brief",
+      objectKey,
+      contentType: "text/markdown; charset=utf-8",
+      metadata: {
+        generatedAt: brief.groundedInput.generatedAt,
+        profile: brief.profile,
+        route: brief.route,
+        transport: brief.transport,
+        provider: brief.provider,
+        model: brief.model,
+        attempts: brief.attempts,
+        groundedFindingCount: brief.groundedInput.findings.length,
+        groundedRecommendationCount: brief.groundedInput.recommendations.length,
+        groundedArtifactCount: brief.groundedInput.artifacts.length,
+      },
+    });
+
+    return jsonResponse(
+      {
+        artifact: {
+          id: artifactId,
+          kind: "ai-brief",
+          objectKey,
+        },
+        brief: {
+          profile: brief.profile,
+          route: brief.route,
+          transport: brief.transport,
+          provider: brief.provider,
+          model: brief.model,
+          attempts: brief.attempts,
+          groundedInput: {
+            generatedAt: brief.groundedInput.generatedAt,
+            findingCount: brief.groundedInput.findings.length,
+            recommendationCount: brief.groundedInput.recommendations.length,
+            artifactCount: brief.groundedInput.artifacts.length,
+          },
+          content: brief.content,
+        },
+      },
+      { status: 201 },
+    );
+  } catch (error) {
+    return jsonResponse(
+      {
+        error:
+          error instanceof Error
+            ? error.message
+            : "AI brief generation failed.",
+        inference: getInferenceCapabilities(env),
+      },
+      { status: 503 },
+    );
+  }
 }
 
 async function handleGetExport(request: Request, env: Env, exportId: string): Promise<Response> {
@@ -594,6 +675,10 @@ export default class EdgeIntelWorker extends WorkerEntrypoint<Env> {
       return handleGetScan(this.env, path.split("/")[3]);
     }
 
+    if (request.method === "POST" && /^\/api\/scans\/[^/]+\/ai-brief$/.test(path)) {
+      return handleCreateAiBrief(request, this.env, path.split("/")[3]);
+    }
+
     if (request.method === "GET" && /^\/api\/domains\/[^/]+\/history$/.test(path)) {
       return handleDomainHistory(this.env, decodeURIComponent(path.split("/")[3]));
     }
@@ -627,6 +712,10 @@ export default class EdgeIntelWorker extends WorkerEntrypoint<Env> {
 
     if (request.method === "GET" && /^\/api\/exports\/[^/]+$/.test(path)) {
       return handleGetExport(request, this.env, path.split("/")[3]);
+    }
+
+    if (request.method === "GET" && path === "/api/inference/capabilities") {
+      return handleInferenceCapabilities(this.env);
     }
 
     if (

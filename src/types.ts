@@ -16,6 +16,12 @@ export type Severity = "critical" | "high" | "medium" | "low" | "info";
 export type RecommendationPriority = "critical" | "high" | "medium" | "low";
 export type ExportFormat = "markdown" | "json" | "terraform" | "cf-api";
 export type RecommendationPhase = 1 | 2 | 3 | 4;
+export type InferenceRoute = "hosted" | "local-direct" | "local-gateway";
+export type AiBriefProfile = "executive" | "technical" | "upgrade-planner";
+export type InferenceTransport =
+  | "ai-gateway-binding"
+  | "ai-gateway-fetch"
+  | "direct-openai-compatible";
 
 export interface ScanRequestBody {
   domain?: string;
@@ -24,6 +30,14 @@ export interface ScanRequestBody {
 
 export interface DomainWatchRequestBody {
   intervalHours?: number;
+}
+
+export interface AiBriefRequestBody {
+  route?: InferenceRoute;
+  profile?: AiBriefProfile;
+  provider?: string;
+  model?: string;
+  instruction?: string;
 }
 
 export interface ScanTarget {
@@ -193,6 +207,17 @@ export interface ArtifactDescriptor {
   objectKey: string;
   contentType: string;
   metadata: Record<string, unknown>;
+}
+
+export interface InferenceCapability {
+  route: InferenceRoute;
+  available: boolean;
+  transport: InferenceTransport | null;
+  provider: string | null;
+  model: string | null;
+  accessProtected: boolean;
+  requiresConfiguredSecrets: string[];
+  notes: string[];
 }
 
 export interface ScanResultBundle {
