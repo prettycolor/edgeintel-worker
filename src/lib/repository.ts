@@ -3,6 +3,7 @@ import type {
   ArtifactDescriptor,
   ExportFormat,
   Finding,
+  PersistedDomainWatch,
   PersistedArtifact,
   PersistedRecommendation,
   PersistedScanRun,
@@ -361,6 +362,18 @@ export async function getScanRun(env: Env, scanRunId: string): Promise<Persisted
   return row ? toRun(row) : null;
 }
 
+export async function getLatestRunForDomain(
+  env: Env,
+  domain: string,
+): Promise<PersistedScanRun | null> {
+  const row = await env.EDGE_DB.prepare(
+    `SELECT * FROM scan_runs WHERE domain = ? ORDER BY created_at DESC LIMIT 1`,
+  )
+    .bind(domain)
+    .first<Record<string, unknown>>();
+  return row ? toRun(row) : null;
+}
+
 export async function getFindingsForRun(
   env: Env,
   scanRunId: string,
@@ -470,4 +483,100 @@ export async function listDomainHistory(
     .bind(domain)
     .all<Record<string, unknown>>();
   return (result.results ?? []).map(toRun);
+}
+
+export async function upsertDomainWatch(
+  env: Env,
+  domain: string,
+  intervalHours: number,
+): Promise<void> {
+  const timestamp = nowIso();
+  const nextRunAt = new Date(Date.now() + intervalHours * 60 * 60 * 1000)
+    .toISOString();
+
+  await env.EDGE_DB.prepare(
+    `INSERT INTO domain_watches (
+      domain, interval_hours, active, next_run_at, created_at, updated_at
+    ) VALUES (?, ?, 1, ?, ?, ?)
+    ON CONFLICT(domain) DO UPDATE SET
+      interval_hours = excluded.interval_hours,
+      active = 1,
+      next_run_at = excluded.next_run_at,
+      updated_at = excluded.updated_at`,
+  )
+    .bind(domain, intervalHours, nextRunAt, timestamp, timestamp)
+    .run();
+}
+
+export async function deleteDomainWatch(env: Env, domain: string): Promise<void> {
+  await env.EDGE_DB.prepare(`DELETE FROM domain_watches WHERE domain = ?`)
+    .bind(domain)
+    .run();
+}
+
+export async function getDomainWatch(
+  env: Env,
+  domain: string,
+): Promise<PersistedDomainWatch | null> {
+  const row = await env.EDGE_DB.prepare(
+    `SELECT * FROM domain_watches WHERE domain = ?`,
+  )
+    .bind(domain)
+    .first<Record<string, unknown>>();
+
+  if (!row) return null;
+
+  return {
+    domain: String(row.domain),
+    intervalHours: Number(row.interval_hours),
+    active: Number(row.active) === 1,
+    lastEnqueuedAt: (row.last_enqueued_at as string | null) ?? null,
+    nextRunAt: String(row.next_run_at),
+    createdAt: String(row.created_at),
+    updatedAt: String(row.updated_at),
+  };
+}
+
+export async function listDueDomainWatches(
+  env: Env,
+  dueBefore: string,
+  limit = 20,
+): Promise<PersistedDomainWatch[]> {
+  const result = await env.EDGE_DB.prepare(
+    `SELECT *
+     FROM domain_watches
+     WHERE active = 1 AND next_run_at <= ?
+     ORDER BY next_run_at ASC
+     LIMIT ?`,
+  )
+    .bind(dueBefore, limit)
+    .all<Record<string, unknown>>();
+
+  return (result.results ?? []).map((row) => ({
+    domain: String(row.domain),
+    intervalHours: Number(row.interval_hours),
+    active: Number(row.active) === 1,
+    lastEnqueuedAt: (row.last_enqueued_at as string | null) ?? null,
+    nextRunAt: String(row.next_run_at),
+    createdAt: String(row.created_at),
+    updatedAt: String(row.updated_at),
+  }));
+}
+
+export async function markDomainWatchEnqueued(
+  env: Env,
+  domain: string,
+  intervalHours: number,
+): Promise<void> {
+  const timestamp = nowIso();
+  const nextRunAt = new Date(Date.now() + intervalHours * 60 * 60 * 1000)
+    .toISOString();
+
+  await env.EDGE_DB.prepare(
+    `UPDATE domain_watches
+     SET last_enqueued_at = ?, next_run_at = ?, updated_at = ?
+     WHERE domain = ?`,
+  )
+    .bind(timestamp, nextRunAt, timestamp, domain)
+    .run();
 }

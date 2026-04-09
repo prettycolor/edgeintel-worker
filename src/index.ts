@@ -5,21 +5,27 @@ import {
   createExportRecord,
   createJob,
   createScanRuns,
+  deleteDomainWatch,
   getArtifactsForRun,
+  getDomainWatch,
   getExportRecord,
   getFindingsForRun,
   getJob,
+  getLatestRunForDomain,
   getRecommendationsForRun,
   getRunsForJob,
   getScanContext,
   getScanRun,
   insertArtifact,
+  listDueDomainWatches,
   listDomainHistory,
   markRunFailed,
+  markDomainWatchEnqueued,
   markRunStarted,
   recalculateJobStatus,
   storeRunBundle,
   attachWorkflowInstance,
+  upsertDomainWatch,
 } from "./lib/repository";
 import { buildCanonicalUrl, normalizeDomain, normalizeRequestedDomains } from "./lib/domain";
 import {
@@ -35,6 +41,7 @@ import {
   performEdgeScan,
   summarizeModuleFailures,
 } from "./lib/scanner";
+import { buildHistoryEntries } from "./lib/history";
 import { generateArtifacts } from "./lib/artifacts";
 import {
   exportContentType,
@@ -45,6 +52,7 @@ import {
 } from "./lib/exports";
 import type {
   ArtifactQueueMessage,
+  DomainWatchRequestBody,
   ExportFormat,
   PersistedRecommendation,
   ScanQueueMessage,
@@ -142,15 +150,35 @@ async function handleCreateScan(request: Request, env: Env): Promise<Response> {
     ...(body.domains ?? []),
   ];
 
+  const created = await createScanJob(env, requestedDomains, normalizedDomains);
+
+  return jsonResponse(created, { status: 202 });
+}
+
+async function createScanJob(
+  env: Env,
+  requestedDomains: string[],
+  normalizedDomains: string[],
+): Promise<{
+  jobId: string;
+  workflowInstanceId: string;
+  domains: string[];
+  scanRuns: Array<{ id: string; domain: string }>;
+  statusUrl: string;
+  eventsUrl: string;
+}> {
   const jobId = crypto.randomUUID();
   await createJob(env, jobId, requestedDomains, normalizedDomains);
   const runs = await createScanRuns(env, jobId, normalizedDomains);
 
   const coordinator = coordinatorFor(env, jobId);
-  await coordinator.initialize(jobId, runs.map((run) => ({
-    scanRunId: run.id,
-    domain: run.domain,
-  })));
+  await coordinator.initialize(
+    jobId,
+    runs.map((run) => ({
+      scanRunId: run.id,
+      domain: run.domain,
+    })),
+  );
 
   const workflowPayload: ScanWorkflowParams = {
     jobId,
@@ -166,17 +194,14 @@ async function handleCreateScan(request: Request, env: Env): Promise<Response> {
   });
   await attachWorkflowInstance(env, jobId, workflowInstance.id);
 
-  return jsonResponse(
-    {
-      jobId,
-      workflowInstanceId: workflowInstance.id,
-      domains: normalizedDomains,
-      scanRuns: runs,
-      statusUrl: `/api/jobs/${jobId}`,
-      eventsUrl: `/api/jobs/${jobId}/events`,
-    },
-    { status: 202 },
-  );
+  return {
+    jobId,
+    workflowInstanceId: workflowInstance.id,
+    domains: normalizedDomains,
+    scanRuns: runs,
+    statusUrl: `/api/jobs/${jobId}`,
+    eventsUrl: `/api/jobs/${jobId}/events`,
+  };
 }
 
 async function handleGetJob(env: Env, jobId: string): Promise<Response> {
@@ -192,6 +217,17 @@ async function handleGetJob(env: Env, jobId: string): Promise<Response> {
     job,
     snapshot,
     runs,
+    batchSummary: {
+      queued: snapshot.domains.filter((domain) => domain.status === "queued").length,
+      processing: snapshot.domains.filter((domain) => domain.status === "processing")
+        .length,
+      completed: snapshot.domains.filter((domain) => domain.status === "completed")
+        .length,
+      degraded: snapshot.domains.filter(
+        (domain) => domain.status === "completed_with_failures",
+      ).length,
+      failed: snapshot.domains.filter((domain) => domain.status === "failed").length,
+    },
   });
 }
 
@@ -227,7 +263,118 @@ async function handleDomainHistory(env: Env, domainParam: string): Promise<Respo
     return badRequest(error instanceof Error ? error.message : "Invalid domain.");
   }
   const history = await listDomainHistory(env, domain);
-  return jsonResponse({ domain, history });
+  const historyEntries = buildHistoryEntries(history);
+  const latest = history[0] ?? null;
+  const watch = await getDomainWatch(env, domain);
+  return jsonResponse({
+    domain,
+    latest: historyEntries[0] ?? latest,
+    watch,
+    history: historyEntries,
+  });
+}
+
+async function handleLatestDomain(env: Env, domainParam: string): Promise<Response> {
+  let domain: string;
+  try {
+    domain = normalizeDomain(domainParam);
+  } catch (error) {
+    return badRequest(error instanceof Error ? error.message : "Invalid domain.");
+  }
+
+  const latestRun = await getLatestRunForDomain(env, domain);
+  if (!latestRun) return notFound("No scans found for domain.");
+
+  const scanContext = await getScanContext(env, latestRun.id);
+  if (!scanContext) return notFound("Latest scan context not found.");
+
+  return jsonResponse({
+    domain,
+    latest: {
+      run: scanContext.run,
+      resultBundle: safeJsonParse(scanContext.run.rawResultJson, null),
+      findings: scanContext.findings,
+      artifacts: scanContext.artifacts.map((artifact) => ({
+        ...artifact,
+        metadata: JSON.parse(artifact.metadataJson),
+      })),
+      recommendations: scanContext.recommendations.map((recommendation) => ({
+        ...recommendation,
+        blockedBy: JSON.parse(recommendation.blockedByJson),
+        evidenceRefs: JSON.parse(recommendation.evidenceJson),
+        technicalSummary: recommendation.technicalSummary,
+        executiveSummary: recommendation.executiveSummary,
+        prerequisites: JSON.parse(recommendation.prerequisitesJson),
+        exportPayload: JSON.parse(recommendation.exportJson),
+      })),
+    },
+  });
+}
+
+async function handleManualRescan(env: Env, domainParam: string): Promise<Response> {
+  let domain: string;
+  try {
+    domain = normalizeDomain(domainParam);
+  } catch (error) {
+    return badRequest(error instanceof Error ? error.message : "Invalid domain.");
+  }
+
+  const created = await createScanJob(env, [domain], [domain]);
+  return jsonResponse(
+    {
+      domain,
+      ...created,
+    },
+    { status: 202 },
+  );
+}
+
+async function handleUpsertDomainWatch(
+  request: Request,
+  env: Env,
+  domainParam: string,
+): Promise<Response> {
+  let domain: string;
+  try {
+    domain = normalizeDomain(domainParam);
+  } catch (error) {
+    return badRequest(error instanceof Error ? error.message : "Invalid domain.");
+  }
+
+  const body = (await request.json().catch(() => ({}))) as DomainWatchRequestBody;
+  const intervalHours = Number(body.intervalHours ?? 24);
+  if (!Number.isInteger(intervalHours) || intervalHours < 1 || intervalHours > 168) {
+    return badRequest("intervalHours must be an integer between 1 and 168.");
+  }
+
+  await upsertDomainWatch(env, domain, intervalHours);
+  const watch = await getDomainWatch(env, domain);
+
+  return jsonResponse(
+    {
+      domain,
+      watch,
+    },
+    { status: 201 },
+  );
+}
+
+async function handleDeleteDomainWatch(
+  env: Env,
+  domainParam: string,
+): Promise<Response> {
+  let domain: string;
+  try {
+    domain = normalizeDomain(domainParam);
+  } catch (error) {
+    return badRequest(error instanceof Error ? error.message : "Invalid domain.");
+  }
+
+  await deleteDomainWatch(env, domain);
+  return jsonResponse({
+    domain,
+    watch: null,
+  });
 }
 
 function renderExportContent(
@@ -451,6 +598,29 @@ export default class EdgeIntelWorker extends WorkerEntrypoint<Env> {
       return handleDomainHistory(this.env, decodeURIComponent(path.split("/")[3]));
     }
 
+    if (request.method === "GET" && /^\/api\/domains\/[^/]+\/latest$/.test(path)) {
+      return handleLatestDomain(this.env, decodeURIComponent(path.split("/")[3]));
+    }
+
+    if (request.method === "POST" && /^\/api\/domains\/[^/]+\/rescan$/.test(path)) {
+      return handleManualRescan(this.env, decodeURIComponent(path.split("/")[3]));
+    }
+
+    if (request.method === "POST" && /^\/api\/domains\/[^/]+\/watch$/.test(path)) {
+      return handleUpsertDomainWatch(
+        request,
+        this.env,
+        decodeURIComponent(path.split("/")[3]),
+      );
+    }
+
+    if (request.method === "DELETE" && /^\/api\/domains\/[^/]+\/watch$/.test(path)) {
+      return handleDeleteDomainWatch(
+        this.env,
+        decodeURIComponent(path.split("/")[3]),
+      );
+    }
+
     if (request.method === "POST" && /^\/api\/exports\/[^/]+$/.test(path)) {
       return handleCreateExport(request, this.env, path.split("/")[3]);
     }
@@ -491,6 +661,15 @@ export default class EdgeIntelWorker extends WorkerEntrypoint<Env> {
         });
         message.retry();
       }
+    }
+  }
+
+  async scheduled(): Promise<void> {
+    const dueWatches = await listDueDomainWatches(this.env, new Date().toISOString());
+
+    for (const watch of dueWatches) {
+      await createScanJob(this.env, [watch.domain], [watch.domain]);
+      await markDomainWatchEnqueued(this.env, watch.domain, watch.intervalHours);
     }
   }
 }

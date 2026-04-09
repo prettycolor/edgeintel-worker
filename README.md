@@ -5,8 +5,14 @@ Cloudflare-native domain posture and remediation engine for the `hostingtool.dev
 ## What This Implements
 
 - `POST /api/scan` to create a bounded public-domain scan job
+- `POST /api/domains/:domain/rescan` to trigger a fresh single-domain scan job
+- `POST /api/domains/:domain/watch` and `DELETE /api/domains/:domain/watch`
+  to manage hourly-to-weekly scheduled rescans
+- `GET /api/domains/:domain/latest` and `GET /api/domains/:domain/history`
+  for latest posture and diff-aware run history
 - Durable Object job coordination with job snapshots and event streaming
 - Workflow-driven orchestration that fans out stateless scan work through Cloudflare Queues
+- Scheduled watch processing through an hourly cron trigger
 - Public web posture collection across:
   - DoH-based DNS
   - HTTP/HTTPS response and redirect analysis

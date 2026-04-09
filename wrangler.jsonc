@@ -11,6 +11,9 @@
   "browser": {
     "binding": "BROWSER"
   },
+  "triggers": {
+    "crons": ["0 * * * *"]
+  },
   "vars": {
     "SCAN_BATCH_LIMIT": "10",
     "SCAN_QUEUE_NAME": "edgeintel-scan",

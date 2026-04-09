@@ -22,6 +22,10 @@ export interface ScanRequestBody {
   domains?: string[];
 }
 
+export interface DomainWatchRequestBody {
+  intervalHours?: number;
+}
+
 export interface ScanTarget {
   domain: string;
   scanRunId: string;
@@ -270,4 +274,14 @@ export interface PersistedRecommendation {
   prerequisitesJson: string;
   exportJson: string;
   createdAt: string;
+}
+
+export interface PersistedDomainWatch {
+  domain: string;
+  intervalHours: number;
+  active: boolean;
+  lastEnqueuedAt: string | null;
+  nextRunAt: string;
+  createdAt: string;
+  updatedAt: string;
 }
