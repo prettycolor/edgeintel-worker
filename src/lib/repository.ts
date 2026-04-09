@@ -263,8 +263,9 @@ async function insertRecommendation(
   await env.EDGE_DB.prepare(
     `INSERT INTO scan_recommendations (
       id, scan_run_id, product_code, title, rationale, priority, confidence,
-      expected_impact, prerequisites_json, export_json, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      phase, sequence, blocked_by_json, evidence_json, expected_impact,
+      technical_summary, executive_summary, prerequisites_json, export_json, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   )
     .bind(
       recommendation.id,
@@ -274,7 +275,13 @@ async function insertRecommendation(
       recommendation.rationale,
       recommendation.priority,
       recommendation.confidence,
+      recommendation.phase,
+      recommendation.sequence,
+      JSON.stringify(recommendation.blockedBy),
+      JSON.stringify(recommendation.evidenceRefs),
       recommendation.expectedImpact,
+      recommendation.technicalSummary,
+      recommendation.executiveSummary,
       JSON.stringify(recommendation.prerequisites),
       JSON.stringify(recommendation.exportPayload),
       nowIso(),
@@ -395,7 +402,9 @@ export async function getRecommendationsForRun(
   scanRunId: string,
 ): Promise<PersistedRecommendation[]> {
   const result = await env.EDGE_DB.prepare(
-    `SELECT * FROM scan_recommendations WHERE scan_run_id = ? ORDER BY confidence DESC`,
+    `SELECT * FROM scan_recommendations
+     WHERE scan_run_id = ?
+     ORDER BY phase ASC, sequence ASC, confidence DESC`,
   )
     .bind(scanRunId)
     .all<Record<string, unknown>>();
@@ -408,7 +417,13 @@ export async function getRecommendationsForRun(
     rationale: String(row.rationale),
     priority: row.priority as PersistedRecommendation["priority"],
     confidence: Number(row.confidence),
+    phase: Number(row.phase) as PersistedRecommendation["phase"],
+    sequence: Number(row.sequence),
+    blockedByJson: String(row.blocked_by_json ?? "[]"),
+    evidenceJson: String(row.evidence_json ?? "[]"),
     expectedImpact: String(row.expected_impact),
+    technicalSummary: String(row.technical_summary ?? ""),
+    executiveSummary: String(row.executive_summary ?? ""),
     prerequisitesJson: String(row.prerequisites_json),
     exportJson: String(row.export_json),
     createdAt: String(row.created_at),

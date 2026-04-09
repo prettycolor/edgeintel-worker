@@ -48,15 +48,22 @@ function renderRecommendationMarkdown(recommendation: PersistedRecommendation): 
     recommendation.prerequisitesJson,
     [],
   );
+  const blockedBy = safeJsonParse<string[]>(recommendation.blockedByJson, []);
+  const evidenceRefs = safeJsonParse<string[]>(recommendation.evidenceJson, []);
 
   return [
     `## ${recommendation.title}`,
     "",
     `- Product: ${recommendation.productCode}`,
+    `- Rollout Phase: ${recommendation.phase}.${recommendation.sequence}`,
     `- Priority: ${recommendation.priority}`,
     `- Confidence: ${recommendation.confidence}`,
     `- Expected Impact: ${recommendation.expectedImpact}`,
     `- Rationale: ${recommendation.rationale}`,
+    `- Executive Summary: ${recommendation.executiveSummary}`,
+    `- Technical Summary: ${recommendation.technicalSummary}`,
+    `- Evidence Refs: ${evidenceRefs.length > 0 ? evidenceRefs.join("; ") : "None"}`,
+    `- Blocked By: ${blockedBy.length > 0 ? blockedBy.join("; ") : "None"}`,
     `- Prerequisites: ${
       prerequisites.length > 0 ? prerequisites.join("; ") : "None"
     }`,
@@ -95,36 +102,44 @@ export function renderTerraformExport(context: ExportContext): string {
   const blocks = context.recommendations.map((recommendation) => {
     switch (recommendation.productCode) {
       case "WAF":
-        return `
+      return `
 resource "cloudflare_ruleset" "edgeintel_waf" {
   zone_id = var.zone_id
   name    = "EdgeIntel recommended WAF rules"
   kind    = "zone"
   phase   = "http_request_firewall_custom"
 }
+
+# Suggested rollout sequence: phase ${recommendation.phase}.${recommendation.sequence}
+# ${recommendation.technicalSummary}
 `;
       case "TURNSTILE":
-        return `
+      return `
 # Turnstile widget creation is account-scoped.
 # Create a widget for the detected auth flows and wire it into the application forms.
+# Suggested rollout sequence: phase ${recommendation.phase}.${recommendation.sequence}
 `;
       case "LOAD_BALANCING":
-        return `
+      return `
 resource "cloudflare_load_balancer" "edgeintel_lb" {
   zone_id          = var.zone_id
   default_pools    = []
   fallback_pool_id = ""
   name             = "edgeintel-origin-balancer"
 }
+
+# ${recommendation.technicalSummary}
 `;
       case "CACHE_RULES":
-        return `
+      return `
 resource "cloudflare_ruleset" "edgeintel_cache" {
   zone_id = var.zone_id
   name    = "EdgeIntel cache rules"
   kind    = "zone"
   phase   = "http_request_cache_settings"
 }
+
+# ${recommendation.technicalSummary}
 `;
       default:
         return `
@@ -156,6 +171,12 @@ export function renderApiPayloadExport(context: ExportContext): string {
   const payload = context.recommendations.map((recommendation) => ({
     productCode: recommendation.productCode,
     title: recommendation.title,
+    phase: recommendation.phase,
+    sequence: recommendation.sequence,
+    blockedBy: safeJsonParse<string[]>(recommendation.blockedByJson, []),
+    evidenceRefs: safeJsonParse<string[]>(recommendation.evidenceJson, []),
+    executiveSummary: recommendation.executiveSummary,
+    technicalSummary: recommendation.technicalSummary,
     expectedImpact: recommendation.expectedImpact,
     payload: safeJsonParse<Record<string, unknown>>(recommendation.exportJson, {}),
   }));
@@ -170,6 +191,8 @@ export function renderJsonExport(context: ExportContext): string {
       artifacts: context.artifacts,
       recommendations: context.recommendations.map((recommendation) => ({
         ...recommendation,
+        blockedBy: safeJsonParse(recommendation.blockedByJson, []),
+        evidenceRefs: safeJsonParse(recommendation.evidenceJson, []),
         prerequisites: safeJsonParse(recommendation.prerequisitesJson, []),
         exportPayload: safeJsonParse(recommendation.exportJson, {}),
       })),

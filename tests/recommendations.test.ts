@@ -127,6 +127,15 @@ const findings: Finding[] = [
     detail: "Cache weak",
     evidence: {},
   },
+  {
+    id: "f5",
+    category: "security",
+    severity: "high",
+    code: "MISSING_STRICT_TRANSPORT_SECURITY",
+    title: "Missing HSTS",
+    detail: "HSTS missing",
+    evidence: {},
+  },
 ];
 
 const recommendations: Recommendation[] = [];
@@ -158,5 +167,42 @@ describe("recommendation engine", () => {
     expect(codes).toContain("TURNSTILE");
     expect(codes).toContain("API_SHIELD");
     expect(codes).toContain("CACHE_RULES");
+
+    const waf = recommendations.find(
+      (recommendation) => recommendation.productCode === "WAF",
+    );
+    expect(waf).toMatchObject({
+      phase: 1,
+      sequence: 20,
+    });
+    expect(waf?.blockedBy).toContain("cloudflare_proxy_adoption");
+    expect(waf?.evidenceRefs).toContain("EDGE_NOT_ON_CLOUDFLARE");
+    expect(waf?.exportPayload).toMatchObject({
+      product: "waf",
+    });
+
+    const turnstile = recommendations.find(
+      (recommendation) => recommendation.productCode === "TURNSTILE",
+    );
+    expect(turnstile).toMatchObject({
+      phase: 2,
+      sequence: 10,
+    });
+    expect(turnstile?.blockedBy).toEqual([]);
+    expect(turnstile?.executiveSummary.length).toBeGreaterThan(20);
+
+    const orderedPairs = recommendations.map((recommendation) => [
+      recommendation.productCode,
+      `${recommendation.phase}.${recommendation.sequence}`,
+    ]);
+    expect(orderedPairs).toEqual([
+      ["WAF", "1.20"],
+      ["ADVANCED_CERTIFICATE_MANAGER", "1.30"],
+      ["TURNSTILE", "2.10"],
+      ["BOT_MANAGEMENT", "2.20"],
+      ["API_SHIELD", "2.30"],
+      ["CACHE_RULES", "3.20"],
+      ["SMART_ROUTING", "4.10"],
+    ]);
   });
 });

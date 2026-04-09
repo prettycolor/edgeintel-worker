@@ -23,6 +23,11 @@ Cloudflare-native domain posture and remediation engine for the `hostingtool.dev
   - JSON findings bundles
   - Terraform drafts
   - Cloudflare API payload drafts
+- Weighted Cloudflare Upgrade Planner recommendations with:
+  - rollout phase and sequence
+  - blocker tracking
+  - evidence references
+  - executive and technical summaries
 
 ## Layout
 

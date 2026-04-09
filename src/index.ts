@@ -209,6 +209,10 @@ async function handleGetScan(env: Env, scanRunId: string): Promise<Response> {
     })),
     recommendations: scanContext.recommendations.map((recommendation) => ({
       ...recommendation,
+      blockedBy: JSON.parse(recommendation.blockedByJson),
+      evidenceRefs: JSON.parse(recommendation.evidenceJson),
+      technicalSummary: recommendation.technicalSummary,
+      executiveSummary: recommendation.executiveSummary,
       prerequisites: JSON.parse(recommendation.prerequisitesJson),
       exportPayload: JSON.parse(recommendation.exportJson),
     })),

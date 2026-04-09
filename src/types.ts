@@ -15,6 +15,7 @@ export type ScanRunStatus =
 export type Severity = "critical" | "high" | "medium" | "low" | "info";
 export type RecommendationPriority = "critical" | "high" | "medium" | "low";
 export type ExportFormat = "markdown" | "json" | "terraform" | "cf-api";
+export type RecommendationPhase = 1 | 2 | 3 | 4;
 
 export interface ScanRequestBody {
   domain?: string;
@@ -171,7 +172,13 @@ export interface Recommendation {
   rationale: string;
   priority: RecommendationPriority;
   confidence: number;
+  phase: RecommendationPhase;
+  sequence: number;
+  blockedBy: string[];
+  evidenceRefs: string[];
   expectedImpact: string;
+  technicalSummary: string;
+  executiveSummary: string;
   prerequisites: string[];
   exportPayload: Record<string, unknown>;
 }
@@ -253,7 +260,13 @@ export interface PersistedRecommendation {
   rationale: string;
   priority: RecommendationPriority;
   confidence: number;
+  phase: RecommendationPhase;
+  sequence: number;
+  blockedByJson: string;
+  evidenceJson: string;
   expectedImpact: string;
+  technicalSummary: string;
+  executiveSummary: string;
   prerequisitesJson: string;
   exportJson: string;
   createdAt: string;
