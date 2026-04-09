@@ -1,0 +1,83 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "edgeintel-worker",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-04-09",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  },
+  "browser": {
+    "binding": "BROWSER"
+  },
+  "vars": {
+    "SCAN_BATCH_LIMIT": "10",
+    "SCAN_QUEUE_NAME": "edgeintel-scan",
+    "ARTIFACT_QUEUE_NAME": "edgeintel-artifacts",
+    "AI_GATEWAY_BASE_URL": "",
+    "AI_GATEWAY_MODEL": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+    "AI_GATEWAY_PROVIDER": "workers-ai",
+    "BROWSER_RENDERING_REST_BASE_URL": ""
+  },
+  "d1_databases": [
+    {
+      "binding": "EDGE_DB",
+      "database_name": "edgeintel"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "EDGE_ARTIFACTS",
+      "bucket_name": "edgeintel-artifacts"
+    }
+  ],
+  "queues": {
+    "producers": [
+      {
+        "binding": "SCAN_QUEUE",
+        "queue": "edgeintel-scan"
+      },
+      {
+        "binding": "ARTIFACT_QUEUE",
+        "queue": "edgeintel-artifacts"
+      }
+    ],
+    "consumers": [
+      {
+        "queue": "edgeintel-scan",
+        "max_batch_size": 5,
+        "max_batch_timeout": 5
+      },
+      {
+        "queue": "edgeintel-artifacts",
+        "max_batch_size": 3,
+        "max_batch_timeout": 10
+      }
+    ]
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "JOB_COORDINATOR",
+        "class_name": "JobCoordinator"
+      }
+    ]
+  },
+  "workflows": [
+    {
+      "name": "edgeintel-scan-workflow",
+      "binding": "SCAN_WORKFLOW",
+      "class_name": "EdgeIntelScanWorkflow"
+    }
+  ],
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["JobCoordinator"]
+    }
+  ],
+  "limits": {
+    "cpu_ms": 300000
+  }
+}
