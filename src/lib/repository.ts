@@ -20,6 +20,7 @@ interface PersistedJob {
   progress: number;
   total_runs: number;
   completed_runs: number;
+  degraded_runs: number;
   failed_runs: number;
   workflow_instance_id: string | null;
   created_at: string;
@@ -55,8 +56,8 @@ export async function createJob(
   await env.EDGE_DB.prepare(
     `INSERT INTO scan_jobs (
       id, requested_domains, normalized_domains, status, progress, total_runs,
-      completed_runs, failed_runs, created_at, updated_at
-    ) VALUES (?, ?, ?, 'queued', 0, ?, 0, 0, ?, ?)`,
+      completed_runs, degraded_runs, failed_runs, created_at, updated_at
+    ) VALUES (?, ?, ?, 'queued', 0, ?, 0, 0, 0, ?, ?)`,
   )
     .bind(
       jobId,
@@ -125,24 +126,29 @@ export async function storeRunBundle(
   env: Env,
   scanRunId: string,
   bundle: ScanResultBundle,
+  runStatus: Extract<ScanRunStatus, "completed" | "completed_with_failures">,
+  failureReason: string | null,
 ): Promise<void> {
   const timestamp = nowIso();
   await env.EDGE_DB.prepare(
     `UPDATE scan_runs
-     SET status = 'completed',
+     SET status = ?,
          source_url = ?,
          final_url = ?,
          scan_summary_json = ?,
          raw_result_json = ?,
+         failure_reason = ?,
          completed_at = ?,
          updated_at = ?
      WHERE id = ?`,
   )
     .bind(
+      runStatus,
       bundle.http.attemptedUrl,
       bundle.http.finalUrl,
       JSON.stringify(bundle.summary),
       JSON.stringify(bundle),
+      failureReason,
       timestamp,
       timestamp,
       scanRunId,
@@ -189,6 +195,7 @@ export async function recalculateJobStatus(env: Env, jobId: string): Promise<voi
     `SELECT
       COUNT(*) AS total,
       SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) AS completed,
+      SUM(CASE WHEN status = 'completed_with_failures' THEN 1 ELSE 0 END) AS degraded,
       SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) AS failed
      FROM scan_runs
      WHERE job_id = ?`,
@@ -198,23 +205,33 @@ export async function recalculateJobStatus(env: Env, jobId: string): Promise<voi
 
   const total = Number(counts?.total ?? 0);
   const completed = Number(counts?.completed ?? 0);
+  const degraded = Number(counts?.degraded ?? 0);
   const failed = Number(counts?.failed ?? 0);
-  const processed = completed + failed;
+  const processed = completed + degraded + failed;
   const progress = total > 0 ? Math.round((processed / total) * 100) : 0;
 
   let status = "running";
   let completedAt: string | null = null;
   if (processed === total && total > 0) {
-    status = failed > 0 ? "completed_with_failures" : "completed";
+    status = degraded + failed > 0 ? "completed_with_failures" : "completed";
     completedAt = nowIso();
   }
 
   await env.EDGE_DB.prepare(
     `UPDATE scan_jobs
-     SET status = ?, progress = ?, completed_runs = ?, failed_runs = ?, updated_at = ?, completed_at = COALESCE(?, completed_at)
+     SET status = ?, progress = ?, completed_runs = ?, degraded_runs = ?, failed_runs = ?, updated_at = ?, completed_at = COALESCE(?, completed_at)
      WHERE id = ?`,
   )
-    .bind(status, progress, completed, failed, nowIso(), completedAt, jobId)
+    .bind(
+      status,
+      progress,
+      completed,
+      degraded,
+      failed,
+      nowIso(),
+      completedAt,
+      jobId,
+    )
     .run();
 }
 

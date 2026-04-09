@@ -1,0 +1,14 @@
+# Local development secrets for Wrangler.
+# Copy to .dev.vars for local use. Do not commit the real file.
+
+# Optional AI Gateway bearer token.
+AI_GATEWAY_TOKEN=
+
+# Optional Browser Rendering REST token.
+BROWSER_RENDERING_API_TOKEN=
+
+# Optional Cloudflare account identifier for account-scoped helpers.
+CLOUDFLARE_ACCOUNT_ID=
+
+# Optional override if you expose a self-hosted model or gateway over HTTPS.
+LOCAL_MODEL_GATEWAY_URL=

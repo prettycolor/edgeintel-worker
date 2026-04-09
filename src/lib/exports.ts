@@ -3,7 +3,9 @@ import type {
   PersistedArtifact,
   PersistedRecommendation,
   PersistedScanRun,
+  ScanResultBundle,
 } from "../types";
+import { getFailedScanModules } from "./scanner";
 import { safeJsonParse } from "./utils";
 
 interface ExportContext {
@@ -15,17 +17,25 @@ interface ExportContext {
 
 function buildExecutiveSummary(context: ExportContext): string {
   const summary = safeJsonParse<Record<string, unknown>>(context.run.scanSummaryJson, {});
+  const resultBundle = safeJsonParse<ScanResultBundle | null>(
+    context.run.rawResultJson,
+    null,
+  );
   const edgeProvider =
     typeof summary.edgeProvider === "object" &&
     summary.edgeProvider &&
     "provider" in summary.edgeProvider
       ? String((summary.edgeProvider as Record<string, unknown>).provider ?? "unknown")
       : "unknown";
+  const failedModules = resultBundle ? getFailedScanModules(resultBundle) : [];
 
   return [
     `# EdgeIntel Report: ${context.run.domain}`,
     "",
     `Status: ${context.run.status}`,
+    failedModules.length > 0
+      ? `Partial module failures: ${failedModules.join(", ")}`
+      : "Partial module failures: none",
     `Observed edge provider: ${edgeProvider}`,
     `Artifacts captured: ${context.artifacts.length}`,
     `Recommendations generated: ${context.recommendations.length}`,

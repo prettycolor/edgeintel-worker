@@ -4,6 +4,17 @@ This roadmap is grounded in the current repository state. The Worker scaffold, D
 
 The goal of the next buildout is not to re-architect from scratch. It is to harden, deepen, and connect the existing pieces until `EdgeIntel` becomes a strong production-style domain posture and Cloudflare remediation platform for the `hostingtool.dev` / `hostinginfo.gg` environment.
 
+## Execution Protocol
+
+Every phase follows the same build discipline:
+
+1. implement the phase deliverables
+2. run review and verification for that phase
+3. tighten polish and fix issues found in review
+4. only then move to the next phase
+
+This repo should advance one verified phase at a time rather than accumulating speculative unfinished layers.
+
 ## Phase 0: Foundation Lock-In
 
 ### Goal

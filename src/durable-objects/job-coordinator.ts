@@ -16,6 +16,7 @@ function defaultState(jobId: string): PersistedJobState {
     status: "queued",
     totalRuns: 0,
     completedRuns: 0,
+    degradedRuns: 0,
     failedRuns: 0,
     progress: 0,
     domains: [],
@@ -92,19 +93,24 @@ export class JobCoordinator extends DurableObject<Env> {
     snapshot.completedRuns = snapshot.domains.filter(
       (domain) => domain.status === "completed",
     ).length;
+    snapshot.degradedRuns = snapshot.domains.filter(
+      (domain) => domain.status === "completed_with_failures",
+    ).length;
     snapshot.failedRuns = snapshot.domains.filter(
       (domain) => domain.status === "failed",
     ).length;
+    const processedRuns =
+      snapshot.completedRuns + snapshot.degradedRuns + snapshot.failedRuns;
     snapshot.progress =
       snapshot.totalRuns > 0
-        ? Math.round(
-            ((snapshot.completedRuns + snapshot.failedRuns) / snapshot.totalRuns) * 100,
-          )
+        ? Math.round((processedRuns / snapshot.totalRuns) * 100)
         : 0;
 
-    if (snapshot.completedRuns + snapshot.failedRuns === snapshot.totalRuns) {
+    if (processedRuns === snapshot.totalRuns) {
       snapshot.status =
-        snapshot.failedRuns > 0 ? "completed_with_failures" : "completed";
+        snapshot.degradedRuns + snapshot.failedRuns > 0
+          ? "completed_with_failures"
+          : "completed";
     } else if (
       snapshot.domains.some((domain) => domain.status === "processing")
     ) {
@@ -116,6 +122,7 @@ export class JobCoordinator extends DurableObject<Env> {
     await this.appendEvent("run.status", {
       ...update,
       progress: snapshot.progress,
+      degradedRuns: snapshot.degradedRuns,
     });
     return snapshot;
   }

@@ -51,6 +51,25 @@ export function deriveFindings(
     return findings;
   }
 
+  if (http.surfaceClassification.isDenied) {
+    findings.push(
+      finding({
+        category: "http",
+        severity: "high",
+        code: "PUBLIC_EDGE_DENIED",
+        title: "The public surface returned an access-denied style response",
+        detail:
+          "The primary web surface returned a denial-oriented status such as 401, 403, or 429. That often indicates upstream access policy, bot mitigation, or WAF interaction that should be understood before migration planning.",
+        evidence: {
+          status: http.status,
+          finalUrl: http.finalUrl,
+          headers: http.headers,
+          attempts: http.attempts,
+        },
+      }),
+    );
+  }
+
   if (summary.dnsProvider.provider !== "Cloudflare") {
     findings.push(
       finding({
@@ -114,6 +133,23 @@ export function deriveFindings(
         evidence: {
           headers: http.headers,
           staticAssetHints: http.staticAssetHints,
+        },
+      }),
+    );
+  }
+
+  if (!http.surfaceClassification.isHtml && !summary.apiSurfaceDetected) {
+    findings.push(
+      finding({
+        category: "http",
+        severity: "low",
+        code: "NON_HTML_PRIMARY_SURFACE",
+        title: "The primary surface is not clearly HTML-rendered content",
+        detail:
+          "The public response did not expose clear HTML content. That can be legitimate, but it changes how posture evidence and rendering artifacts should be interpreted.",
+        evidence: {
+          contentType: http.contentType,
+          finalUrl: http.finalUrl,
         },
       }),
     );

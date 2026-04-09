@@ -1,0 +1,1 @@
+ALTER TABLE scan_jobs ADD COLUMN degraded_runs INTEGER NOT NULL DEFAULT 0;

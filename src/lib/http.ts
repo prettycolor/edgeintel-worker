@@ -1,4 +1,5 @@
 import type { HttpProbe, RedirectHop } from "../types";
+import { withRetry } from "./utils";
 
 const USER_AGENT =
   "EdgeIntel/0.1 (+https://hostinginfo.gg; Cloudflare Worker posture analysis)";
@@ -58,18 +59,41 @@ async function fetchPreview(response: Response): Promise<string | null> {
   return text.slice(0, 16_000);
 }
 
-async function follow(startUrl: string): Promise<HttpProbe> {
+interface FollowOutcome {
+  attemptedUrl: string;
+  finalUrl: string | null;
+  status: number | null;
+  ok: boolean;
+  redirectChain: RedirectHop[];
+  headers: Record<string, string>;
+  htmlPreview: string | null;
+  pageTitle: string | null;
+  apiHints: string[];
+  authHints: string[];
+  staticAssetHints: string[];
+  contentType: string | null;
+  contentLength: number | null;
+}
+
+async function follow(startUrl: string): Promise<FollowOutcome> {
   const redirectChain: RedirectHop[] = [];
   let currentUrl = startUrl;
 
   for (let attempt = 0; attempt < 6; attempt += 1) {
-    const response = await fetch(currentUrl, {
-      method: "GET",
-      redirect: "manual",
-      headers: {
-        "user-agent": USER_AGENT,
+    const { value: response } = await withRetry(
+      () =>
+        fetch(currentUrl, {
+          method: "GET",
+          redirect: "manual",
+          headers: {
+            "user-agent": USER_AGENT,
+          },
+        }),
+      {
+        attempts: 2,
+        delayMs: 200,
       },
-    });
+    );
 
     const location = normalizeRedirectLocation(
       currentUrl,
@@ -112,6 +136,8 @@ async function follow(startUrl: string): Promise<HttpProbe> {
         htmlPreview,
         /(\/assets\/[^\s"'<>]+|\/static\/[^\s"'<>]+|\.css|\.js)/gi,
       ),
+      contentType: response.headers.get("content-type"),
+      contentLength: Number(response.headers.get("content-length")) || null,
     };
   }
 
@@ -127,26 +153,89 @@ async function follow(startUrl: string): Promise<HttpProbe> {
     apiHints: [],
     authHints: [],
     staticAssetHints: [],
-    error: "Redirect chain exceeded maximum depth.",
+    contentType: null,
+    contentLength: null,
   };
 }
 
 export async function probeDomainSurface(domain: string): Promise<HttpProbe> {
+  const attempts: HttpProbe["attempts"] = [];
+  const errors: string[] = [];
+
   try {
+    const httpsStartedAt = Date.now();
     const httpsProbe = await follow(`https://${domain}`);
-    if (httpsProbe.ok || httpsProbe.status !== null) return httpsProbe;
-  } catch {
-    // Fall back to HTTP when HTTPS fails.
+    attempts.push({
+      url: `https://${domain}`,
+      scheme: "https",
+      durationMs: Date.now() - httpsStartedAt,
+      status: httpsProbe.status,
+      ok: httpsProbe.ok,
+      finalUrl: httpsProbe.finalUrl,
+    });
+    if (httpsProbe.ok || httpsProbe.status !== null) {
+      return {
+        ...httpsProbe,
+        protocolUsed: "https",
+        attempts,
+        surfaceClassification: {
+          isHtml: Boolean(httpsProbe.contentType?.includes("text/html")),
+          isDenied: httpsProbe.status === 401 || httpsProbe.status === 403 || httpsProbe.status === 429,
+          redirectCount: httpsProbe.redirectChain.length,
+          hasApiHints: httpsProbe.apiHints.length > 0,
+          hasAuthHints: httpsProbe.authHints.length > 0,
+        },
+        errors,
+      };
+    }
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "HTTPS probe failed";
+    attempts.push({
+      url: `https://${domain}`,
+      scheme: "https",
+      durationMs: 0,
+      status: null,
+      ok: false,
+      finalUrl: null,
+      error: message,
+    });
+    errors.push(message);
   }
 
   try {
-    return await follow(`http://${domain}`);
+    const httpStartedAt = Date.now();
+    const httpProbe = await follow(`http://${domain}`);
+    attempts.push({
+      url: `http://${domain}`,
+      scheme: "http",
+      durationMs: Date.now() - httpStartedAt,
+      status: httpProbe.status,
+      ok: httpProbe.ok,
+      finalUrl: httpProbe.finalUrl,
+    });
+    return {
+      ...httpProbe,
+      protocolUsed: "http",
+      attempts,
+      surfaceClassification: {
+        isHtml: Boolean(httpProbe.contentType?.includes("text/html")),
+        isDenied: httpProbe.status === 401 || httpProbe.status === 403 || httpProbe.status === 429,
+        redirectCount: httpProbe.redirectChain.length,
+        hasApiHints: httpProbe.apiHints.length > 0,
+        hasAuthHints: httpProbe.authHints.length > 0,
+      },
+      errors,
+    };
   } catch (error) {
+    const message = error instanceof Error ? error.message : "HTTP probe failed";
+    errors.push(message);
     return {
       attemptedUrl: `https://${domain}`,
       finalUrl: null,
       status: null,
       ok: false,
+      protocolUsed: "unknown",
       redirectChain: [],
       headers: {},
       htmlPreview: null,
@@ -154,7 +243,18 @@ export async function probeDomainSurface(domain: string): Promise<HttpProbe> {
       apiHints: [],
       authHints: [],
       staticAssetHints: [],
-      error: error instanceof Error ? error.message : "HTTP probe failed",
+      contentType: null,
+      contentLength: null,
+      attempts,
+      surfaceClassification: {
+        isHtml: false,
+        isDenied: false,
+        redirectCount: 0,
+        hasApiHints: false,
+        hasAuthHints: false,
+      },
+      errors,
+      error: message,
     };
   }
 }

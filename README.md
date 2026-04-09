@@ -13,6 +13,11 @@ Cloudflare-native domain posture and remediation engine for the `hostingtool.dev
   - provider attribution and surface detection
   - findings and Cloudflare recommendation generation
 - Artifact generation into R2, with Browser Rendering REST support when configured
+  - `response-metadata` evidence
+  - `raw-html`
+  - `rendered-markdown`
+  - `screenshot`
+  - `artifact-manifest` with capture/skip/failure provenance
 - Export generation for:
   - Markdown reports
   - JSON findings bundles
@@ -36,9 +41,26 @@ Cloudflare-native domain posture and remediation engine for the `hostingtool.dev
 
 ```bash
 cd edgeintel-worker
-npm install
-npx wrangler d1 migrations apply edgeintel --local
+nvm use
+npm run bootstrap
 npm run dev
+```
+
+The bootstrap flow will:
+
+- require Node 24.x from [`.nvmrc`](./.nvmrc)
+- install dependencies if needed
+- generate Wrangler-backed runtime types
+- create a local `.dev.vars` from the example if missing
+- apply local D1 migrations into Wrangler local state
+
+Useful follow-up commands:
+
+```bash
+npm run validate:install
+npm run db:local:list
+npm run db:local:reset
+npm run verify
 ```
 
 Remote Browser Rendering is optional. If you want rendered markdown and screenshots from Cloudflare Browser Rendering REST, set:
@@ -65,7 +87,7 @@ This is the phase-0/1 implementation slice:
 - real DNS + HTTP posture collection
 - real findings and recommendation generation
 - real export generation
-- bounded artifact generation
+- bounded artifact generation with explicit provenance and manifest capture
 
 What is intentionally not here yet:
 

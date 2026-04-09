@@ -1,6 +1,6 @@
 import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloudflare:workers";
 import type { Env } from "../env";
-import type { ScanWorkflowParams } from "../types";
+import type { PersistedJobState, ScanWorkflowParams } from "../types";
 
 export class EdgeIntelScanWorkflow extends WorkflowEntrypoint<Env, ScanWorkflowParams> {
   async run(
@@ -27,9 +27,13 @@ export class EdgeIntelScanWorkflow extends WorkflowEntrypoint<Env, ScanWorkflowP
     }
 
     for (let attempt = 0; attempt < 90; attempt += 1) {
-      const snapshot = await step.do(`check-progress-${attempt}`, async () => {
-        return coordinator.getSnapshot();
-      });
+      const snapshot = await step.do<PersistedJobState>(
+        `check-progress-${attempt}`,
+        async () =>
+          JSON.parse(
+            JSON.stringify(await coordinator.getSnapshot()),
+          ) as PersistedJobState,
+      );
 
       if (
         snapshot.status === "completed" ||

@@ -2,6 +2,10 @@ export function nowIso(): string {
   return new Date().toISOString();
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export function jsonResponse(
   data: unknown,
   init: ResponseInit = {},
@@ -61,4 +65,31 @@ export function safeJsonParse<T>(value: string | null, fallback: T): T {
 
 export function slugify(input: string): string {
   return input.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+}
+
+export async function withRetry<T>(
+  operation: () => Promise<T>,
+  options: {
+    attempts: number;
+    delayMs: number;
+  },
+): Promise<{ value: T; attempts: number }> {
+  let attempts = 0;
+  let lastError: unknown;
+
+  while (attempts < options.attempts) {
+    attempts += 1;
+    try {
+      const value = await operation();
+      return { value, attempts };
+    } catch (error) {
+      lastError = error;
+      if (attempts >= options.attempts) break;
+      await sleep(options.delayMs * attempts);
+    }
+  }
+
+  throw lastError instanceof Error
+    ? Object.assign(lastError, { attempts })
+    : new Error("Retryable operation failed");
 }

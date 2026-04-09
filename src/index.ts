@@ -22,8 +22,19 @@ import {
   attachWorkflowInstance,
 } from "./lib/repository";
 import { buildCanonicalUrl, normalizeDomain, normalizeRequestedDomains } from "./lib/domain";
-import { badRequest, jsonResponse, methodNotAllowed, notFound, textResponse } from "./lib/utils";
-import { performEdgeScan } from "./lib/scanner";
+import {
+  badRequest,
+  jsonResponse,
+  methodNotAllowed,
+  notFound,
+  safeJsonParse,
+  textResponse,
+} from "./lib/utils";
+import {
+  bundleHasModuleFailures,
+  performEdgeScan,
+  summarizeModuleFailures,
+} from "./lib/scanner";
 import { generateArtifacts } from "./lib/artifacts";
 import {
   exportContentType,
@@ -190,6 +201,7 @@ async function handleGetScan(env: Env, scanRunId: string): Promise<Response> {
 
   return jsonResponse({
     run: scanContext.run,
+    resultBundle: safeJsonParse(scanContext.run.rawResultJson, null),
     findings: scanContext.findings,
     artifacts: scanContext.artifacts.map((artifact) => ({
       ...artifact,
@@ -318,12 +330,24 @@ async function processScanMessage(env: Env, message: ScanQueueMessage): Promise<
 
   try {
     const bundle = await performEdgeScan(message.domain);
-    await storeRunBundle(env, message.scanRunId, bundle);
+    const runStatus = bundleHasModuleFailures(bundle)
+      ? "completed_with_failures"
+      : "completed";
+    const moduleFailureSummary = summarizeModuleFailures(bundle);
+
+    await storeRunBundle(
+      env,
+      message.scanRunId,
+      bundle,
+      runStatus,
+      moduleFailureSummary,
+    );
     await coordinator.markRunStatus({
       scanRunId: message.scanRunId,
       domain: message.domain,
-      status: "completed",
+      status: runStatus,
       finalUrl: bundle.http.finalUrl,
+      error: moduleFailureSummary ?? undefined,
     });
     await recalculateJobStatus(env, message.jobId);
 

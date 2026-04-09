@@ -9,6 +9,7 @@ export type ScanRunStatus =
   | "queued"
   | "processing"
   | "completed"
+  | "completed_with_failures"
   | "failed";
 
 export type Severity = "critical" | "high" | "medium" | "low" | "info";
@@ -52,6 +53,27 @@ export interface DnsRecord {
   ttl?: number;
 }
 
+export interface DnsQueryEvidence {
+  type: string;
+  ok: boolean;
+  recordCount: number;
+  durationMs: number;
+  attempts: number;
+  error?: string;
+}
+
+export interface TtlSummary {
+  min: number | null;
+  max: number | null;
+  average: number | null;
+}
+
+export interface DnsEvidence {
+  queryResults: DnsQueryEvidence[];
+  observedRecordTypes: string[];
+  ttlSummary: TtlSummary;
+}
+
 export interface DnsProfile {
   nameservers: DnsRecord[];
   a: DnsRecord[];
@@ -59,6 +81,7 @@ export interface DnsProfile {
   cname: DnsRecord[];
   mx: DnsRecord[];
   txt: DnsRecord[];
+  evidence: DnsEvidence;
 }
 
 export interface RedirectHop {
@@ -72,6 +95,7 @@ export interface HttpProbe {
   finalUrl: string | null;
   status: number | null;
   ok: boolean;
+  protocolUsed: "https" | "http" | "unknown";
   redirectChain: RedirectHop[];
   headers: Record<string, string>;
   htmlPreview: string | null;
@@ -79,6 +103,25 @@ export interface HttpProbe {
   apiHints: string[];
   authHints: string[];
   staticAssetHints: string[];
+  contentType: string | null;
+  contentLength: number | null;
+  attempts: Array<{
+    url: string;
+    scheme: "https" | "http";
+    durationMs: number;
+    status: number | null;
+    ok: boolean;
+    finalUrl: string | null;
+    error?: string;
+  }>;
+  surfaceClassification: {
+    isHtml: boolean;
+    isDenied: boolean;
+    redirectCount: number;
+    hasApiHints: boolean;
+    hasAuthHints: boolean;
+  };
+  errors: string[];
   error?: string;
 }
 
@@ -99,6 +142,16 @@ export interface ScanSummary {
   cacheSignals: string[];
   missingSecurityHeaders: string[];
   finalUrl: string | null;
+}
+
+export interface ScanModuleResult<T> {
+  ok: boolean;
+  attempts: number;
+  startedAt: string;
+  completedAt: string;
+  durationMs: number;
+  error?: string;
+  data: T;
 }
 
 export interface Finding {
@@ -139,6 +192,13 @@ export interface ScanResultBundle {
   summary: ScanSummary;
   findings: Finding[];
   recommendations: Recommendation[];
+  modules: {
+    dns: ScanModuleResult<DnsProfile>;
+    http: ScanModuleResult<HttpProbe>;
+    summary: ScanModuleResult<ScanSummary>;
+    findings: ScanModuleResult<Finding[]>;
+    recommendations: ScanModuleResult<Recommendation[]>;
+  };
 }
 
 export interface PersistedJobState {
@@ -146,6 +206,7 @@ export interface PersistedJobState {
   status: ScanJobStatus;
   totalRuns: number;
   completedRuns: number;
+  degradedRuns: number;
   failedRuns: number;
   progress: number;
   domains: Array<{
