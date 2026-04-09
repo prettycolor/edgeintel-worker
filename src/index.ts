@@ -283,7 +283,12 @@ async function handleCreateExport(
     objectKey,
     contentType,
     {
+      schemaVersion: "edgeintel.export.v1.5",
+      generatedAt: new Date().toISOString(),
+      scanRunId,
+      domain: scanContext.run.domain,
       generatedFromFindings: true,
+      artifactCount: scanContext.artifacts.length,
       recommendationCount: scanContext.recommendations.length,
     },
   );

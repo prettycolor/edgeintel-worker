@@ -201,6 +201,6 @@ describe("scan module status", () => {
     });
 
     expect(markdown).toContain("Status: completed_with_failures");
-    expect(markdown).toContain("Partial module failures: summary");
+    expect(markdown).toContain("Partial Module Failures: summary");
   });
 });
