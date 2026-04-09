@@ -73,3 +73,7 @@ What is intentionally not here yet:
 - private-network or raw port probing
 - deep authenticated crawl flows
 - advanced AI-generated summaries as a hard dependency
+
+## Roadmap
+
+The implementation sequence is documented in [docs/implementation-phases.md](./docs/implementation-phases.md).
