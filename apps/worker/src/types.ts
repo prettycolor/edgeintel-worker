@@ -37,6 +37,8 @@ export type TunnelConnectorStatus =
   | "degraded"
   | "offline";
 export type TunnelTestStatus = "passed" | "failed" | "warning";
+export type PairingSessionStatus = "pending" | "active" | "revoked" | "expired";
+export type OperatorSessionMode = "access" | "dev-bypass";
 
 export interface ScanRequestBody {
   domain?: string;
@@ -111,6 +113,20 @@ export interface TunnelHeartbeatRequestBody {
   version?: string;
   localServiceReachable?: boolean;
   model?: string | null;
+  note?: string | null;
+}
+
+export interface PairingCreateRequestBody {
+  tunnelId?: string;
+  expiresInSeconds?: number | null;
+  label?: string | null;
+  note?: string | null;
+}
+
+export interface PairingExchangeRequestBody {
+  pairingToken?: string;
+  connectorName?: string | null;
+  connectorVersion?: string | null;
   note?: string | null;
 }
 
@@ -427,6 +443,18 @@ export interface PersistedProviderSetting {
   updatedAt: string;
 }
 
+export interface OperatorSession {
+  mode: OperatorSessionMode;
+  subject: string;
+  email: string | null;
+  name: string | null;
+  issuer: string;
+  audience: string[];
+  groups: string[];
+  issuedAt: string | null;
+  expiresAt: string | null;
+}
+
 export interface PersistedTunnelRecord {
   id: string;
   providerSettingId: string | null;
@@ -452,4 +480,64 @@ export interface PersistedTunnelRecord {
   metadataJson: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface PersistedPairingSession {
+  id: string;
+  tunnelId: string;
+  issuedBySubject: string;
+  issuedByEmail: string | null;
+  status: PairingSessionStatus;
+  pairingTokenHash: string;
+  connectorTokenHash: string | null;
+  connectorName: string | null;
+  connectorVersion: string | null;
+  exchangeCount: number;
+  issuedAt: string;
+  expiresAt: string;
+  exchangedAt: string | null;
+  connectorExpiresAt: string | null;
+  lastSeenAt: string | null;
+  revokedAt: string | null;
+  expiredAt: string | null;
+  metadataJson: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PairingSessionView {
+  id: string;
+  tunnelId: string;
+  issuedBySubject: string;
+  issuedByEmail: string | null;
+  status: PairingSessionStatus;
+  connectorName: string | null;
+  connectorVersion: string | null;
+  exchangeCount: number;
+  issuedAt: string;
+  expiresAt: string;
+  exchangedAt: string | null;
+  connectorExpiresAt: string | null;
+  lastSeenAt: string | null;
+  revokedAt: string | null;
+  expiredAt: string | null;
+  metadata: Record<string, unknown>;
+}
+
+export interface PairingSecretView {
+  pairingId: string;
+  pairingToken: string;
+  tunnelId: string;
+  publicHostname: string;
+  apiBase: string;
+  exchangeEndpoint: string;
+  expiresAt: string;
+  instructions: string[];
+}
+
+export interface ConnectorSessionView {
+  type: "bearer";
+  pairingId: string;
+  token: string;
+  expiresAt: string;
 }

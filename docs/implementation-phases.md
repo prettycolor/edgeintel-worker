@@ -27,6 +27,14 @@ The goal of the next buildout is not to re-architect from scratch. It is to hard
   - `apps/control-plane-web` provides the React control-plane foundation
   - `apps/desktop-connector` provides the Electron macOS tray/window scaffold
   - root scripts proxy the existing Worker commands from the repo root
+- Phase 9 Access-first auth and scoped bootstrap delivery is implemented:
+  - `/app`, `/app/providers`, `/app/tunnels`, and secret-bearing provider/tunnel
+    APIs now require Cloudflare Access JWT validation in the Worker
+  - `/api/session` exposes the authenticated operator session to the app shell
+  - tunnel bootstrap is no longer returned by normal tunnel detail APIs
+  - `/api/pairings` plus `/api/pairings/:id/exchange` provide one-time pairing
+    handoff for the connector
+  - connector heartbeat now requires a scoped bearer token tied to the pairing
 
 ## Execution Protocol
 

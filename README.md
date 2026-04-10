@@ -19,7 +19,10 @@ Cloudflare-native domain posture and remediation engine for the `hostingtool.dev
   `POST /api/tunnels/:id/test`,
   `POST /api/tunnels/:id/rotate-token`, and
   `POST /api/tunnels/:id/heartbeat` for local-model tunnel orchestration,
-  runtime testing, connector bootstrap, and heartbeat status
+  runtime testing, scoped connector pairing, and heartbeat status
+- `GET /api/session`, `POST /api/pairings`, and
+  `POST /api/pairings/:id/exchange` for Access-authenticated operator session
+  inspection plus one-time connector bootstrap exchange
 - `GET /app` and `GET /app/providers` for the current Worker-served provider control-plane UI
 - `GET /app/tunnels` for the current Worker-served tunnel and local-model wizard workspace
 - `POST /api/scans/:scanRunId/ai-brief` to generate an evidence-bounded AI
@@ -63,13 +66,16 @@ Cloudflare-native domain posture and remediation engine for the `hostingtool.dev
   - remotely managed Cloudflare Tunnel provisioning
   - proxied DNS CNAME management to `<tunnel-id>.cfargotunnel.com`
   - optional Access reusable policy, service token, and self-hosted app creation
-  - persisted tunnel bootstrap and runtime test history
+  - Access-first app auth for `/app`, `/app/providers`, `/app/tunnels`, and
+    secret-bearing tunnel/provider APIs
+  - one-time pairing sessions so raw tunnel bootstrap is no longer returned by
+    ordinary tunnel detail APIs
   - connector heartbeat updates for machine-side status
 - Reference connector runtime with:
-  - bootstrap fetch from the Worker API
+  - one-time pairing exchange from the Worker API
   - `cloudflared` validation and launch
   - local service probing
-  - heartbeat reporting back into EdgeIntel
+  - authenticated heartbeat reporting back into EdgeIntel
 
 ## Layout
 
@@ -82,7 +88,7 @@ Cloudflare-native domain posture and remediation engine for the `hostingtool.dev
 - `packages/shared-contracts`
   Shared TypeScript contracts for operator surfaces and future connector/worker interop
 - `packages/connector-core`
-  Current reference runtime for tunnel bootstrap, local probing, and heartbeat reporting
+  Current reference runtime for pairing exchange, local probing, and heartbeat reporting
 
 ## Setup
 
@@ -138,6 +144,20 @@ AI Gateway is optional in this initial slice. The scaffold reserves:
 - `AI_GATEWAY_ID`
 - `AI_GATEWAY_BASE_URL`
 - `AI_GATEWAY_TOKEN`
+
+Cloudflare Access is required for the control-plane surfaces in the current
+phase. Configure:
+
+- `ACCESS_TEAM_DOMAIN`
+- `ACCESS_AUD`
+
+For localhost-only development, you can opt into a deliberate bypass with:
+
+- `ACCESS_ALLOW_DEV_BYPASS=true`
+
+Local-model connector onboarding now uses one-time pairings rather than direct
+tunnel bootstrap fetches. The current quick start is in
+[docs/local-model-route-quickstart.md](./docs/local-model-route-quickstart.md).
 - `AI_GATEWAY_MODEL`
 - `AI_GATEWAY_PROVIDER`
 - `AI_UPSTREAM_API_KEY`

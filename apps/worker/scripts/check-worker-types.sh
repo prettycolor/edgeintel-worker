@@ -35,6 +35,7 @@ text = re.sub(
     'import("./src/index")',
     text,
 )
+text = "\n".join(line.rstrip() for line in text.splitlines())
 print(text, end="")
 PY
 }

@@ -6,8 +6,10 @@ import process from "node:process";
 function parseArgs(argv) {
   const args = {
     apiBase: process.env.EDGEINTEL_API_BASE || "",
-    tunnelId: process.env.EDGEINTEL_TUNNEL_ID || "",
+    pairingId: process.env.EDGEINTEL_PAIRING_ID || "",
+    pairingToken: process.env.EDGEINTEL_PAIRING_TOKEN || "",
     cloudflaredBin: process.env.EDGEINTEL_CLOUDFLARED_BIN || "cloudflared",
+    connectorName: process.env.EDGEINTEL_CONNECTOR_NAME || "edgeintel-connector-cli",
     once: false,
     dryRun: false,
     heartbeatIntervalMs: Number(process.env.EDGEINTEL_HEARTBEAT_MS || "30000"),
@@ -23,8 +25,14 @@ function parseArgs(argv) {
       continue;
     }
 
-    if (arg === "--tunnel-id" && next) {
-      args.tunnelId = next;
+    if (arg === "--pairing-id" && next) {
+      args.pairingId = next;
+      index += 1;
+      continue;
+    }
+
+    if (arg === "--pairing-token" && next) {
+      args.pairingToken = next;
       index += 1;
       continue;
     }
@@ -53,8 +61,11 @@ function requireConfig(config) {
   if (!config.apiBase) {
     throw new Error("Missing --api-base or EDGEINTEL_API_BASE.");
   }
-  if (!config.tunnelId) {
-    throw new Error("Missing --tunnel-id or EDGEINTEL_TUNNEL_ID.");
+  if (!config.pairingId) {
+    throw new Error("Missing --pairing-id or EDGEINTEL_PAIRING_ID.");
+  }
+  if (!config.pairingToken) {
+    throw new Error("Missing --pairing-token or EDGEINTEL_PAIRING_TOKEN.");
   }
 }
 
@@ -97,26 +108,39 @@ async function probeLocalService(url) {
   }
 }
 
-async function sendHeartbeat(apiBase, tunnelId, payload) {
+async function sendHeartbeat(apiBase, tunnelId, pairingId, connectorToken, payload) {
   await fetchJson(`${apiBase.replace(/\/+$/, "")}/api/tunnels/${encodeURIComponent(tunnelId)}/heartbeat`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
+      Authorization: `Bearer ${connectorToken}`,
+      "X-EdgeIntel-Pairing-Id": pairingId,
     },
     body: JSON.stringify(payload),
   });
 }
 
-async function loadBootstrap(apiBase, tunnelId) {
+async function exchangePairing(apiBase, pairingId, pairingToken, connectorName) {
   const payload = await fetchJson(
-    `${apiBase.replace(/\/+$/, "")}/api/tunnels/${encodeURIComponent(tunnelId)}`,
+    `${apiBase.replace(/\/+$/, "")}/api/pairings/${encodeURIComponent(pairingId)}/exchange`,
     {
-      method: "GET",
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        pairingToken,
+        connectorName,
+      }),
     },
   );
 
   if (!payload.bootstrap?.tunnelTokenPresent) {
-    throw new Error("Tunnel bootstrap did not include a tunnel token.");
+    throw new Error("Pairing exchange did not return a tunnel token.");
+  }
+
+  if (!payload.connectorSession?.token) {
+    throw new Error("Pairing exchange did not return a connector bearer token.");
   }
 
   return payload;
@@ -126,13 +150,20 @@ async function main() {
   const config = parseArgs(process.argv.slice(2));
   requireConfig(config);
 
-  const payload = await loadBootstrap(config.apiBase, config.tunnelId);
+  const payload = await exchangePairing(
+    config.apiBase,
+    config.pairingId,
+    config.pairingToken,
+    config.connectorName,
+  );
+  const pairing = payload.pairing;
   const tunnel = payload.tunnel;
   const bootstrap = payload.bootstrap;
+  const connectorSession = payload.connectorSession;
   const cloudflaredVersion = getCloudflaredVersion(config.cloudflaredBin);
 
   if (!cloudflaredVersion) {
-    await sendHeartbeat(config.apiBase, config.tunnelId, {
+    await sendHeartbeat(config.apiBase, tunnel.id, pairing.id, connectorSession.token, {
       connectorStatus: "offline",
       version: null,
       localServiceReachable: false,
@@ -154,15 +185,28 @@ async function main() {
   };
 
   if (config.once || config.dryRun) {
-    await sendHeartbeat(config.apiBase, config.tunnelId, heartbeatPayload);
+    await sendHeartbeat(config.apiBase, tunnel.id, pairing.id, connectorSession.token, heartbeatPayload);
     console.log(
       JSON.stringify(
         {
           mode: config.dryRun ? "dry-run" : "once",
-          tunnelId: config.tunnelId,
+          tunnelId: tunnel.id,
           publicHostname: tunnel.publicHostname,
           localServiceUrl: tunnel.localServiceUrl,
-          bootstrap,
+          pairing: {
+            id: pairing.id,
+            status: pairing.status,
+            connectorExpiresAt: pairing.connectorExpiresAt,
+          },
+          bootstrap: {
+            mode: bootstrap.mode,
+            publicHostname: bootstrap.publicHostname,
+            localServiceUrl: bootstrap.localServiceUrl,
+            cloudflareTunnelId: bootstrap.cloudflareTunnelId,
+            cloudflareTunnelName: bootstrap.cloudflareTunnelName,
+            tunnelTokenPresent: bootstrap.tunnelTokenPresent,
+            accessHeadersPresent: Object.keys(bootstrap.accessHeaders || {}).length > 0,
+          },
           localProbe,
           cloudflaredVersion,
         },
@@ -188,7 +232,7 @@ async function main() {
     if (stopped) return;
     stopped = true;
     if (timer) clearInterval(timer);
-    await sendHeartbeat(config.apiBase, config.tunnelId, {
+    await sendHeartbeat(config.apiBase, tunnel.id, pairing.id, connectorSession.token, {
       connectorStatus: status,
       version: cloudflaredVersion,
       localServiceReachable: localProbe.reachable,
@@ -200,11 +244,11 @@ async function main() {
     }
   };
 
-  await sendHeartbeat(config.apiBase, config.tunnelId, heartbeatPayload);
+  await sendHeartbeat(config.apiBase, tunnel.id, pairing.id, connectorSession.token, heartbeatPayload);
 
   timer = setInterval(async () => {
     const probe = await probeLocalService(tunnel.localServiceUrl);
-    await sendHeartbeat(config.apiBase, config.tunnelId, {
+    await sendHeartbeat(config.apiBase, tunnel.id, pairing.id, connectorSession.token, {
       connectorStatus: probe.reachable ? "connected" : "degraded",
       version: cloudflaredVersion,
       localServiceReachable: probe.reachable,

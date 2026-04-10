@@ -52,13 +52,25 @@ That triggers:
 
 5. Run the connector.
 
+Create a one-time pairing from the tunnel workspace, then run the connector
+with the pairing ID and token instead of a raw tunnel ID.
+
 Reference flow:
 
 ```bash
 export EDGEINTEL_API_BASE="https://your-edgeintel-worker.example.com"
-export EDGEINTEL_TUNNEL_ID="replace-with-tunnel-record-id"
-node connector/edgeintel-connector.mjs
+export EDGEINTEL_PAIRING_ID="replace-with-pairing-id"
+export EDGEINTEL_PAIRING_TOKEN="replace-with-one-time-pairing-token"
+node packages/connector-core/src/edgeintel-connector.mjs
 ```
+
+The connector will:
+
+- exchange the one-time pairing for scoped bootstrap plus a connector bearer token
+- verify `cloudflared`
+- probe the local model URL
+- launch `cloudflared tunnel run --token ...`
+- send authenticated heartbeats back to EdgeIntel
 
 6. Run a route test.
 
@@ -85,9 +97,10 @@ When this path is green, the system proves:
 - keep public route orchestration in `/app/tunnels`
 - use `Run test` after every route or token change
 - treat the connector heartbeat as the source of truth for machine-side status
+- create a fresh pairing after any bootstrap rotation
 
 ## Follow-On Docs
 
 - [Hybrid inference](./hybrid-inference.md)
 - [Provider and tunnel roadmap](./provider-and-tunnel-wizard-roadmap.md)
-- [Connector README](../connector/README.md)
+- [Connector README](../packages/connector-core/README.md)

@@ -5,6 +5,7 @@ import type {
   Finding,
   PersistedDomainWatch,
   PersistedArtifact,
+  PersistedPairingSession,
   PersistedProviderSetting,
   PersistedRecommendation,
   PersistedScanRun,
@@ -105,6 +106,33 @@ function toTunnelRecord(row: Record<string, unknown>): PersistedTunnelRecord {
       (row.last_test_status as PersistedTunnelRecord["lastTestStatus"] | null) ??
       null,
     lastTestResultJson: (row.last_test_result_json as string | null) ?? null,
+    metadataJson: String(row.metadata_json ?? "{}"),
+    createdAt: String(row.created_at),
+    updatedAt: String(row.updated_at),
+  };
+}
+
+function toPairingSession(
+  row: Record<string, unknown>,
+): PersistedPairingSession {
+  return {
+    id: String(row.id),
+    tunnelId: String(row.tunnel_id),
+    issuedBySubject: String(row.issued_by_subject),
+    issuedByEmail: (row.issued_by_email as string | null) ?? null,
+    status: row.status as PersistedPairingSession["status"],
+    pairingTokenHash: String(row.pairing_token_hash),
+    connectorTokenHash: (row.connector_token_hash as string | null) ?? null,
+    connectorName: (row.connector_name as string | null) ?? null,
+    connectorVersion: (row.connector_version as string | null) ?? null,
+    exchangeCount: Number(row.exchange_count ?? 0),
+    issuedAt: String(row.issued_at),
+    expiresAt: String(row.expires_at),
+    exchangedAt: (row.exchanged_at as string | null) ?? null,
+    connectorExpiresAt: (row.connector_expires_at as string | null) ?? null,
+    lastSeenAt: (row.last_seen_at as string | null) ?? null,
+    revokedAt: (row.revoked_at as string | null) ?? null,
+    expiredAt: (row.expired_at as string | null) ?? null,
     metadataJson: String(row.metadata_json ?? "{}"),
     createdAt: String(row.created_at),
     updatedAt: String(row.updated_at),
@@ -837,6 +865,199 @@ export async function markTunnelHeartbeat(
       input.metadataJson ?? null,
       tunnelId,
     )
+    .run();
+}
+
+async function expireStalePairingSessions(
+  env: Env,
+  referenceTime = nowIso(),
+): Promise<void> {
+  await env.EDGE_DB.prepare(
+    `UPDATE tunnel_pairing_sessions
+     SET status = 'expired',
+         expired_at = COALESCE(expired_at, ?),
+         updated_at = ?
+     WHERE status = 'pending'
+       AND expires_at <= ?`,
+  )
+    .bind(referenceTime, referenceTime, referenceTime)
+    .run();
+
+  await env.EDGE_DB.prepare(
+    `UPDATE tunnel_pairing_sessions
+     SET status = 'expired',
+         expired_at = COALESCE(expired_at, ?),
+         updated_at = ?
+     WHERE status = 'active'
+       AND connector_expires_at IS NOT NULL
+       AND connector_expires_at <= ?`,
+  )
+    .bind(referenceTime, referenceTime, referenceTime)
+    .run();
+}
+
+export async function createPairingSession(
+  env: Env,
+  input: {
+    tunnelId: string;
+    issuedBySubject: string;
+    issuedByEmail: string | null;
+    pairingTokenHash: string;
+    expiresAt: string;
+    metadataJson: string;
+  },
+): Promise<string> {
+  const pairingId = crypto.randomUUID();
+  const timestamp = nowIso();
+
+  await env.EDGE_DB.prepare(
+    `INSERT INTO tunnel_pairing_sessions (
+      id, tunnel_id, issued_by_subject, issued_by_email, status,
+      pairing_token_hash, exchange_count, issued_at, expires_at, metadata_json,
+      created_at, updated_at
+    ) VALUES (?, ?, ?, ?, 'pending', ?, 0, ?, ?, ?, ?, ?)`,
+  )
+    .bind(
+      pairingId,
+      input.tunnelId,
+      input.issuedBySubject,
+      input.issuedByEmail,
+      input.pairingTokenHash,
+      timestamp,
+      input.expiresAt,
+      input.metadataJson,
+      timestamp,
+      timestamp,
+    )
+    .run();
+
+  return pairingId;
+}
+
+export async function getPairingSession(
+  env: Env,
+  pairingId: string,
+): Promise<PersistedPairingSession | null> {
+  await expireStalePairingSessions(env);
+  const row = await env.EDGE_DB.prepare(
+    `SELECT * FROM tunnel_pairing_sessions WHERE id = ?`,
+  )
+    .bind(pairingId)
+    .first<Record<string, unknown>>();
+
+  return row ? toPairingSession(row) : null;
+}
+
+export async function listPairingSessionsForTunnel(
+  env: Env,
+  tunnelId: string,
+  limit = 10,
+): Promise<PersistedPairingSession[]> {
+  await expireStalePairingSessions(env);
+  const result = await env.EDGE_DB.prepare(
+    `SELECT *
+     FROM tunnel_pairing_sessions
+     WHERE tunnel_id = ?
+     ORDER BY created_at DESC
+     LIMIT ?`,
+  )
+    .bind(tunnelId, limit)
+    .all<Record<string, unknown>>();
+
+  return (result.results ?? []).map(toPairingSession);
+}
+
+export async function activatePairingSession(
+  env: Env,
+  pairingId: string,
+  input: {
+    connectorTokenHash: string;
+    connectorExpiresAt: string;
+    connectorName: string | null;
+    connectorVersion: string | null;
+    metadataJson: string;
+  },
+): Promise<boolean> {
+  const timestamp = nowIso();
+  const result = await env.EDGE_DB.prepare(
+    `UPDATE tunnel_pairing_sessions
+     SET status = 'active',
+         connector_token_hash = ?,
+         connector_name = ?,
+         connector_version = ?,
+         exchange_count = exchange_count + 1,
+         exchanged_at = ?,
+         connector_expires_at = ?,
+         metadata_json = ?,
+         updated_at = ?
+     WHERE id = ?
+       AND status = 'pending'`,
+  )
+    .bind(
+      input.connectorTokenHash,
+      input.connectorName,
+      input.connectorVersion,
+      timestamp,
+      input.connectorExpiresAt,
+      input.metadataJson,
+      timestamp,
+      pairingId,
+    )
+    .run();
+
+  return Number(result.meta.changes ?? 0) > 0;
+}
+
+export async function revokeOtherActivePairingsForTunnel(
+  env: Env,
+  tunnelId: string,
+  exceptPairingId: string,
+): Promise<void> {
+  const timestamp = nowIso();
+  await env.EDGE_DB.prepare(
+    `UPDATE tunnel_pairing_sessions
+     SET status = 'revoked',
+         revoked_at = COALESCE(revoked_at, ?),
+         updated_at = ?
+     WHERE tunnel_id = ?
+       AND id != ?
+       AND status = 'active'`,
+  )
+    .bind(timestamp, timestamp, tunnelId, exceptPairingId)
+    .run();
+}
+
+export async function revokePairingSession(
+  env: Env,
+  pairingId: string,
+): Promise<void> {
+  const timestamp = nowIso();
+  await env.EDGE_DB.prepare(
+    `UPDATE tunnel_pairing_sessions
+     SET status = 'revoked',
+         revoked_at = COALESCE(revoked_at, ?),
+         updated_at = ?
+     WHERE id = ?
+       AND status != 'revoked'`,
+  )
+    .bind(timestamp, timestamp, pairingId)
+    .run();
+}
+
+export async function markPairingSessionSeen(
+  env: Env,
+  pairingId: string,
+  metadataJson?: string,
+): Promise<void> {
+  const timestamp = nowIso();
+  await env.EDGE_DB.prepare(
+    `UPDATE tunnel_pairing_sessions
+     SET last_seen_at = ?,
+         metadata_json = COALESCE(?, metadata_json),
+         updated_at = ?
+     WHERE id = ?`,
+  )
+    .bind(timestamp, metadataJson ?? null, timestamp, pairingId)
     .run();
 }
 

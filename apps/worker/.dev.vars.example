@@ -17,6 +17,15 @@ CLOUDFLARE_API_TOKEN=
 CLOUDFLARE_ACCOUNT_ID=
 CLOUDFLARE_ZONE_ID=
 
+# Optional Cloudflare Access config for operator auth on the control plane.
+ACCESS_TEAM_DOMAIN=
+ACCESS_AUD=
+ACCESS_ALLOW_DEV_BYPASS=false
+
+# Optional pairing and connector token TTL overrides in seconds.
+PAIRING_TOKEN_TTL_SECONDS=900
+CONNECTOR_TOKEN_TTL_SECONDS=2592000
+
 # Optional base64-encoded 32-byte encryption key for provider secret storage.
 PROVIDER_SECRET_ENCRYPTION_KEY=
 

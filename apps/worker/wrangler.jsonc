@@ -26,7 +26,10 @@
     "AI_GATEWAY_MODEL": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
     "AI_GATEWAY_PROVIDER": "workers-ai",
     "AI_INFERENCE_DEFAULT_ROUTE": "hosted",
-    "BROWSER_RENDERING_REST_BASE_URL": ""
+    "BROWSER_RENDERING_REST_BASE_URL": "",
+    "ACCESS_ALLOW_DEV_BYPASS": "false",
+    "PAIRING_TOKEN_TTL_SECONDS": "900",
+    "CONNECTOR_TOKEN_TTL_SECONDS": "2592000"
   },
   "d1_databases": [
     {

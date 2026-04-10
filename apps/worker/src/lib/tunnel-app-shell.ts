@@ -566,10 +566,12 @@ const TUNNEL_APP_SCRIPT = String.raw`
     tunnels: [],
     selectedId: null,
     selectedDetails: null,
+    latestPairingSecret: null,
     saving: false,
     testing: false,
     deleting: false,
     rotating: false,
+    pairing: false,
   };
 
   const ui = {
@@ -579,7 +581,9 @@ const TUNNEL_APP_SCRIPT = String.raw`
     notice: document.getElementById("route-notice"),
     diagnosticsMeta: document.getElementById("route-diagnostics-meta"),
     diagnostics: document.getElementById("route-diagnostics"),
-    bootstrap: document.getElementById("route-bootstrap"),
+    pairingMeta: document.getElementById("route-pairing-meta"),
+    pairingList: document.getElementById("route-pairing-list"),
+    pairingOutput: document.getElementById("route-pairing-output"),
     stepConnect: document.getElementById("step-connect"),
     stepPublish: document.getElementById("step-publish"),
     stepProtect: document.getElementById("step-protect"),
@@ -591,6 +595,7 @@ const TUNNEL_APP_SCRIPT = String.raw`
     deleteButton: document.getElementById("delete-route"),
     testButton: document.getElementById("test-route"),
     rotateButton: document.getElementById("rotate-route"),
+    pairButton: document.getElementById("pair-route"),
     resetButton: document.getElementById("reset-route"),
     routeMode: document.getElementById("route-mode"),
     controlPlaneMeta: document.getElementById("control-plane-meta"),
@@ -711,6 +716,7 @@ const TUNNEL_APP_SCRIPT = String.raw`
     ui.deleteButton.disabled = !entry || state.deleting;
     ui.testButton.disabled = !entry || state.testing;
     ui.rotateButton.disabled = !entry || state.rotating;
+    ui.pairButton.disabled = !entry || state.pairing;
   }
 
   function renderStepper(entry) {
@@ -726,7 +732,6 @@ const TUNNEL_APP_SCRIPT = String.raw`
     if (!entry || !details) {
       ui.diagnosticsMeta.textContent = "Awaiting route selection";
       ui.diagnostics.innerHTML = '<div class="empty-state"><strong>No tunnel selected.</strong><div class="muted">Provision a route or pick an existing one to inspect Access, connector, and runtime status.</div></div>';
-      ui.bootstrap.textContent = "{}";
       return;
     }
 
@@ -757,7 +762,7 @@ const TUNNEL_APP_SCRIPT = String.raw`
         title: "Access protection",
         detail: entry.accessProtected ? "Service token gate enabled" : "Public route",
         helper: entry.accessProtected
-          ? "CF-Access headers are included in the connector bootstrap."
+          ? "Connector exchange returns CF-Access service-token headers for runtime probes."
           : "Access application is disabled for this route.",
       },
     ];
@@ -765,7 +770,45 @@ const TUNNEL_APP_SCRIPT = String.raw`
     ui.diagnostics.innerHTML = diagnostics.map((item) =>
       '<div class="diagnostic-item"><strong>' + escapeHtml(item.title) + '</strong><div>' + escapeHtml(item.detail) + '</div><div class="muted" style="margin-top:6px">' + escapeHtml(item.helper) + '</div></div>'
     ).join("");
-    ui.bootstrap.textContent = JSON.stringify(details.bootstrap, null, 2);
+  }
+
+  function renderPairings(entry) {
+    const details = state.selectedDetails;
+    if (!entry || !details) {
+      ui.pairingMeta.textContent = "Awaiting route selection";
+      ui.pairingList.innerHTML = '<div class="empty-state"><strong>No pairing issued yet.</strong><div class="muted" style="margin-top:6px">Create a route or select an existing one to issue a connector pairing.</div></div>';
+      ui.pairingOutput.textContent = "{}";
+      return;
+    }
+
+    const pairings = Array.isArray(details.pairings) ? details.pairings : [];
+    ui.pairingMeta.textContent = pairings.length
+      ? pairings[0].status.replace(/_/g, " ") + " · " + relativeTimestamp(pairings[0].lastSeenAt || pairings[0].exchangedAt || pairings[0].issuedAt)
+      : "No pairing issued yet";
+
+    ui.pairingList.innerHTML = pairings.length
+      ? pairings.map((pairing) =>
+          '<div class="diagnostic-item">' +
+            '<strong>' + escapeHtml(pairing.connectorName || pairing.issuedByEmail || "Pending connector") + '</strong>' +
+            '<div>' + escapeHtml(pairing.status.replace(/_/g, " ")) + '</div>' +
+            '<div class="muted" style="margin-top:6px">' +
+              escapeHtml(
+                pairing.connectorExpiresAt
+                  ? "Connector token expires " + relativeTimestamp(pairing.connectorExpiresAt)
+                  : "Pairing token expires " + relativeTimestamp(pairing.expiresAt)
+              ) +
+            '</div>' +
+          '</div>'
+        ).join("")
+      : '<div class="empty-state"><strong>No pairings issued for this route.</strong><div class="muted" style="margin-top:6px">Generate a one-time pairing to onboard the connector without exposing raw tunnel secrets in the operator UI.</div></div>';
+
+    const currentSecret = state.latestPairingSecret && state.latestPairingSecret.tunnelId === entry.id
+      ? state.latestPairingSecret
+      : {
+          status: "No in-memory pairing secret",
+          detail: "Create a fresh pairing to hand off bootstrap exchange to the connector.",
+        };
+    ui.pairingOutput.textContent = JSON.stringify(currentSecret, null, 2);
   }
 
   function collectPayload() {
@@ -783,11 +826,15 @@ const TUNNEL_APP_SCRIPT = String.raw`
     await Promise.all([loadProviders(), loadTunnels(preferredId)]);
     await loadTunnelDetails(state.selectedId);
     const entry = findSelected();
+    if (!entry || state.latestPairingSecret?.tunnelId !== entry.id) {
+      state.latestPairingSecret = null;
+    }
     renderStats();
     renderRouteList();
     populateForm(entry);
     renderStepper(entry);
     renderDiagnostics(entry);
+    renderPairings(entry);
   }
 
   async function saveRoute(event) {
@@ -842,19 +889,43 @@ const TUNNEL_APP_SCRIPT = String.raw`
     const entry = findSelected();
     if (!entry) return;
     state.rotating = true;
-    setNotice("Rotating tunnel bootstrap…");
+    setNotice("Rotating scoped tunnel bootstrap…");
     try {
       const response = await fetch(config.tunnelsEndpoint + "/" + encodeURIComponent(entry.id) + "/rotate-token", {
         method: "POST",
       });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload?.error || "Token rotation failed.");
-      setNotice("Tunnel bootstrap rotated.");
+      state.latestPairingSecret = null;
+      setNotice(payload?.nextStep || "Tunnel bootstrap rotated.");
       await refresh(entry.id);
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "Token rotation failed.", "error");
     } finally {
       state.rotating = false;
+    }
+  }
+
+  async function createPairing() {
+    const entry = findSelected();
+    if (!entry) return;
+    state.pairing = true;
+    setNotice("Creating one-time connector pairing…");
+    try {
+      const response = await fetch("/api/pairings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tunnelId: entry.id }),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload?.error || "Failed to create pairing.");
+      state.latestPairingSecret = payload.pairingSecret || null;
+      setNotice("One-time pairing created. Hand it to the connector before it expires.");
+      await refresh(entry.id);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Failed to create pairing.", "error");
+    } finally {
+      state.pairing = false;
     }
   }
 
@@ -888,22 +959,29 @@ const TUNNEL_APP_SCRIPT = String.raw`
     state.selectedId = routeId;
     await loadTunnelDetails(routeId);
     const entry = findSelected();
+    if (state.latestPairingSecret?.tunnelId !== routeId) {
+      state.latestPairingSecret = null;
+    }
     renderRouteList();
     populateForm(entry);
     renderStepper(entry);
     renderDiagnostics(entry);
+    renderPairings(entry);
   });
 
   ui.routeForm.addEventListener("submit", saveRoute);
   ui.testButton.addEventListener("click", runTest);
   ui.rotateButton.addEventListener("click", rotateToken);
+  ui.pairButton.addEventListener("click", createPairing);
   ui.deleteButton.addEventListener("click", deleteRoute);
   ui.resetButton.addEventListener("click", async () => {
     state.selectedId = null;
     state.selectedDetails = null;
+    state.latestPairingSecret = null;
     populateForm(null);
     renderStepper(null);
     renderDiagnostics(null);
+    renderPairings(null);
     setNotice(null);
   });
 
@@ -980,7 +1058,7 @@ export function renderTunnelControlPlaneApp(config: TunnelAppConfig): string {
                 <div class="eyebrow">Phase 7C to 7E</div>
                 <div class="hero-title">Provision the local route once, then let the connector keep it alive.</div>
                 <p class="hero-copy">
-                  This workspace handles the Cloudflare side of the system: remotely managed Tunnel creation, proxied DNS routing, optional Access protection, runtime tests, token rotation, and connector bootstrap delivery.
+                  This workspace handles the Cloudflare side of the system: remotely managed Tunnel creation, proxied DNS routing, optional Access protection, runtime tests, token rotation, and one-time pairing delivery for the local connector.
                 </p>
                 <div class="hero-grid">
                   <div class="hero-stat">
@@ -1024,7 +1102,7 @@ export function renderTunnelControlPlaneApp(config: TunnelAppConfig): string {
                   <div id="step-run" class="step">
                     <div class="step-label">Step 4</div>
                     <strong>Run the connector</strong>
-                    <div class="muted">The connector or raw <code>cloudflared</code> process consumes the bootstrap and keeps heartbeats flowing back to EdgeIntel.</div>
+                    <div class="muted">The connector exchanges a one-time pairing for scoped bootstrap and keeps heartbeats flowing back to EdgeIntel.</div>
                   </div>
                 </div>
               </div>
@@ -1054,7 +1132,7 @@ export function renderTunnelControlPlaneApp(config: TunnelAppConfig): string {
                 <div class="eyebrow">Provisioning wizard</div>
                 <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;margin-top:10px">
                   <h3 id="route-mode">Provision local model route</h3>
-                  <div class="muted">Cloudflare Tunnel, DNS, Access, bootstrap</div>
+                  <div class="muted">Cloudflare Tunnel, DNS, Access, pairings</div>
                 </div>
                 <form id="route-form" class="form-stack" style="margin-top:16px">
                   <input type="hidden" name="tunnelId" />
@@ -1096,6 +1174,7 @@ export function renderTunnelControlPlaneApp(config: TunnelAppConfig): string {
                     <button id="reset-route" class="button secondary" type="button">New route</button>
                     <button id="delete-route" class="button danger" type="button">Delete</button>
                     <button id="test-route" class="button secondary" type="button">Run test</button>
+                    <button id="pair-route" class="button secondary" type="button">Create pairing</button>
                     <button id="rotate-route" class="button warn" type="button">Rotate bootstrap</button>
                     <button class="button primary" type="submit">Save route</button>
                   </div>
@@ -1104,12 +1183,14 @@ export function renderTunnelControlPlaneApp(config: TunnelAppConfig): string {
 
               <div class="stack">
                 <div class="surface-dark">
-                  <div class="eyebrow">Connector bootstrap</div>
-                  <h3 style="margin-top:10px">The local agent contract</h3>
+                  <div class="eyebrow">Connector pairing</div>
+                  <h3 style="margin-top:10px">Scoped handoff to the local agent</h3>
                   <div class="muted" style="margin-top:10px">
-                    This payload is what the reference connector and future desktop wrapper consume. It is already enough to run <code>cloudflared</code>, attach Access headers, and begin heartbeating.
+                    Pairings are one-time operator handoffs. The connector exchanges the pairing token for scoped tunnel bootstrap plus its own bearer token, so raw secrets never live in ordinary tunnel responses.
                   </div>
-                  <pre id="route-bootstrap" class="code-block" style="margin-top:14px">{}</pre>
+                  <div id="route-pairing-meta" class="muted" style="margin-top:10px">Awaiting route selection</div>
+                  <div id="route-pairing-list" class="diagnostic-list" style="margin-top:14px"></div>
+                  <pre id="route-pairing-output" class="code-block" style="margin-top:14px">{}</pre>
                 </div>
 
                 <div class="surface">
@@ -1128,13 +1209,13 @@ export function renderTunnelControlPlaneApp(config: TunnelAppConfig): string {
                     </div>
                     <div class="summary-stat">
                       <div class="eyebrow">Connector</div>
-                      <strong>Heartbeat</strong>
-                      <div class="muted">The connector reports health into the same tunnel record the wizard uses.</div>
+                      <strong>Scoped</strong>
+                      <div class="muted">Pairing exchange keeps bootstrap off the ordinary operator API surface.</div>
                     </div>
                     <div class="summary-stat">
                       <div class="eyebrow">Roadmap fit</div>
                       <strong>Packagable</strong>
-                      <div class="muted">This same contract can be wrapped in a native desktop onboarding experience later.</div>
+                      <div class="muted">This same pairing contract can be wrapped in a native desktop onboarding experience later.</div>
                     </div>
                   </div>
                 </div>

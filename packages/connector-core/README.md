@@ -10,11 +10,11 @@ This package contains the current reference runtime:
 
 It is intentionally simple:
 
-- loads the tunnel bootstrap from the Worker API
+- exchanges a one-time pairing for scoped tunnel bootstrap
 - checks that `cloudflared` is installed
 - probes the local model URL
 - runs `cloudflared tunnel run --token ...`
-- sends heartbeat updates back to `POST /api/tunnels/:id/heartbeat`
+- sends authenticated heartbeat updates back to `POST /api/tunnels/:id/heartbeat`
 
 ## Why This Exists
 
@@ -31,17 +31,18 @@ The reference connector is the bridge between:
 
 ```bash
 export EDGEINTEL_API_BASE="https://your-edgeintel-worker.example.com"
-export EDGEINTEL_TUNNEL_ID="replace-with-tunnel-record-id"
+export EDGEINTEL_PAIRING_ID="replace-with-pairing-id"
+export EDGEINTEL_PAIRING_TOKEN="replace-with-one-time-pairing-token"
 
 npm run connector:once
 ```
 
 That will:
 
-- fetch the tunnel bootstrap from `/api/tunnels/:id`
+- exchange the pairing at `/api/pairings/:id/exchange`
 - verify `cloudflared` is available
 - probe the configured local service
-- send one connector heartbeat
+- send one authenticated connector heartbeat
 
 To run continuously:
 

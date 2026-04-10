@@ -2,8 +2,10 @@ import { WorkerEntrypoint } from "cloudflare:workers";
 import type { Env } from "./env";
 import { JobCoordinator } from "./durable-objects/job-coordinator";
 import {
+  activatePairingSession,
   createExportRecord,
   createJob,
+  createPairingSession,
   createScanRuns,
   createProviderSetting,
   createTunnelRecord,
@@ -16,6 +18,7 @@ import {
   getFindingsForRun,
   getJob,
   getLatestRunForDomain,
+  getPairingSession,
   getProviderSetting,
   getTunnelRecord,
   getRecommendationsForRun,
@@ -31,7 +34,9 @@ import {
   markDomainWatchEnqueued,
   markRunStarted,
   markTunnelHeartbeat,
+  markPairingSessionSeen,
   recalculateJobStatus,
+  revokeOtherActivePairingsForTunnel,
   storeProviderTestResult,
   storeTunnelTestResult,
   storeRunBundle,
@@ -39,6 +44,7 @@ import {
   upsertDomainWatch,
   updateProviderSetting,
   updateTunnelRecord,
+  listPairingSessionsForTunnel,
 } from "./lib/repository";
 import { buildCanonicalUrl, normalizeDomain, normalizeRequestedDomains } from "./lib/domain";
 import {
@@ -73,7 +79,15 @@ import {
   testProviderConnection,
 } from "./lib/provider-settings";
 import {
-  buildTunnelConnectorBootstrap,
+  buildConnectorBootstrapResponse,
+  buildConnectorSessionView,
+  buildPairingSecretView,
+  issueConnectorSession,
+  issuePairingSecret,
+  serializePairingSession,
+  verifyOpaqueToken,
+} from "./lib/pairings";
+import {
   destroyTunnelResources,
   getCloudflareControlPlaneReadiness,
   normalizeTunnelSettingsInput,
@@ -89,11 +103,15 @@ import {
   encryptProviderSecretPayload,
   encryptTunnelSecretPayload,
 } from "./lib/secrets";
+import { requireOperatorSession } from "./lib/auth";
 import type {
   AiBriefRequestBody,
   ArtifactQueueMessage,
   DomainWatchRequestBody,
   ExportFormat,
+  OperatorSession,
+  PairingCreateRequestBody,
+  PairingExchangeRequestBody,
   ProviderSettingsRequestBody,
   ProviderTestRequestBody,
   ScanQueueMessage,
@@ -166,6 +184,52 @@ async function streamJobEvents(env: Env, jobId: string, cursor = 0): Promise<Res
       "cache-control": "no-cache, no-store, must-revalidate",
       connection: "keep-alive",
     },
+  });
+}
+
+function isOperatorControlPlaneRoute(request: Request, path: string): boolean {
+  if (request.method === "GET" && (path === "/app" || path === "/app/providers")) {
+    return true;
+  }
+
+  if (request.method === "GET" && path === "/app/tunnels") {
+    return true;
+  }
+
+  if (path === "/api/session") {
+    return true;
+  }
+
+  if (path === "/api/settings/providers" || path.startsWith("/api/settings/providers/")) {
+    return true;
+  }
+
+  if (path === "/api/tunnels") {
+    return true;
+  }
+
+  if (/^\/api\/tunnels\/[^/]+$/.test(path)) {
+    return true;
+  }
+
+  if (/^\/api\/tunnels\/[^/]+\/(test|rotate-token)$/.test(path)) {
+    return true;
+  }
+
+  if (path === "/api/pairings") {
+    return true;
+  }
+
+  return false;
+}
+
+function buildPairingMetadata(
+  existingMetadataJson: string | null,
+  patch: Record<string, unknown>,
+): string {
+  return JSON.stringify({
+    ...safeJsonParse<Record<string, unknown>>(existingMetadataJson, {}),
+    ...patch,
   });
 }
 
@@ -575,6 +639,10 @@ async function handleTestProvider(
   }
 }
 
+async function handleGetSession(session: OperatorSession): Promise<Response> {
+  return jsonResponse({ session });
+}
+
 async function handleListTunnels(env: Env): Promise<Response> {
   const tunnels = await listTunnelRecords(env);
   return jsonResponse({
@@ -587,10 +655,10 @@ async function handleGetTunnel(env: Env, tunnelId: string): Promise<Response> {
   const tunnel = await getTunnelRecord(env, tunnelId);
   if (!tunnel) return notFound("Tunnel record not found.");
 
-  const secrets = await decryptTunnelSecretPayload(env, tunnel.secretEnvelopeJson);
+  const pairings = await listPairingSessionsForTunnel(env, tunnelId, 8);
   return jsonResponse({
     tunnel: serializeTunnelRecord(tunnel),
-    bootstrap: buildTunnelConnectorBootstrap(tunnel, secrets),
+    pairings: pairings.map(serializePairingSession),
   });
 }
 
@@ -649,7 +717,6 @@ async function handleCreateTunnel(
     return jsonResponse(
       {
         tunnel: serializeTunnelRecord(created),
-        bootstrap: buildTunnelConnectorBootstrap(created, provisioned.secrets),
       },
       { status: 201 },
     );
@@ -729,7 +796,6 @@ async function handleUpdateTunnel(
 
     return jsonResponse({
       tunnel: serializeTunnelRecord(updated),
-      bootstrap: buildTunnelConnectorBootstrap(updated, provisioned.secrets),
     });
   } catch (error) {
     return badRequest(
@@ -790,12 +856,10 @@ async function handleTestTunnel(
     }
 
     const refreshed = await getTunnelRecord(env, tunnelId);
+    const pairings = await listPairingSessionsForTunnel(env, tunnelId, 8);
     return jsonResponse({
       tunnel: refreshed ? serializeTunnelRecord(refreshed) : serializeTunnelRecord(tunnel),
-      bootstrap: buildTunnelConnectorBootstrap(
-        refreshed ?? tunnel,
-        secrets,
-      ),
+      pairings: pairings.map(serializePairingSession),
       testResult: result,
     });
   } catch (error) {
@@ -819,7 +883,6 @@ async function handleTestTunnel(
     return jsonResponse(
       {
         tunnel: serializeTunnelRecord((await getTunnelRecord(env, tunnelId)) ?? tunnel),
-        bootstrap: buildTunnelConnectorBootstrap(tunnel, secrets),
         testResult: failure,
       },
       { status: 502 },
@@ -873,13 +936,13 @@ async function handleRotateTunnelToken(
   });
 
   const refreshed = await getTunnelRecord(env, tunnelId);
+  const pairings = await listPairingSessionsForTunnel(env, tunnelId, 8);
   return jsonResponse({
     tunnel: refreshed ? serializeTunnelRecord(refreshed) : serializeTunnelRecord(existing),
-    bootstrap: buildTunnelConnectorBootstrap(
-      refreshed ?? existing,
-      provisioned.secrets,
-    ),
+    pairings: pairings.map(serializePairingSession),
     rotated: true,
+    nextStep:
+      "Create a fresh pairing before reconnecting any local connector because the tunnel bootstrap changed.",
   });
 }
 
@@ -890,6 +953,53 @@ async function handleTunnelHeartbeat(
 ): Promise<Response> {
   const existing = await getTunnelRecord(env, tunnelId);
   if (!existing) return notFound("Tunnel record not found.");
+
+  const pairingId = request.headers.get("X-EdgeIntel-Pairing-Id")?.trim() ?? null;
+  if (!pairingId) {
+    return jsonResponse(
+      { error: "Missing X-EdgeIntel-Pairing-Id header." },
+      { status: 401 },
+    );
+  }
+
+  const authorization = request.headers.get("Authorization")?.trim() ?? "";
+  const tokenMatch = /^Bearer\s+(.+)$/.exec(authorization);
+  if (!tokenMatch) {
+    return jsonResponse(
+      { error: "Missing connector bearer token." },
+      { status: 401 },
+    );
+  }
+
+  const pairing = await getPairingSession(env, pairingId);
+  if (!pairing || pairing.tunnelId !== tunnelId) {
+    return notFound("Pairing session not found.");
+  }
+
+  if (pairing.status !== "active" || !pairing.connectorExpiresAt) {
+    return jsonResponse(
+      { error: "Connector pairing is not active." },
+      { status: 403 },
+    );
+  }
+
+  if (new Date(pairing.connectorExpiresAt).getTime() <= Date.now()) {
+    return jsonResponse(
+      { error: "Connector bearer token has expired." },
+      { status: 403 },
+    );
+  }
+
+  const isValidConnectorToken = await verifyOpaqueToken(
+    tokenMatch[1] ?? "",
+    pairing.connectorTokenHash,
+  );
+  if (!isValidConnectorToken) {
+    return jsonResponse(
+      { error: "Connector bearer token is invalid." },
+      { status: 403 },
+    );
+  }
 
   const body = (await request.json().catch(() => ({}))) as TunnelHeartbeatRequestBody;
   const connectorStatus = body.connectorStatus ?? "connected";
@@ -903,6 +1013,7 @@ async function handleTunnelHeartbeat(
     metadataJson: JSON.stringify({
       ...currentMetadata,
       connector: {
+        pairingId,
         status: connectorStatus,
         version: body.version ?? null,
         localServiceReachable: body.localServiceReachable ?? null,
@@ -912,11 +1023,152 @@ async function handleTunnelHeartbeat(
       },
     }),
   });
+  await markPairingSessionSeen(
+    env,
+    pairingId,
+    buildPairingMetadata(pairing.metadataJson, {
+      lastHeartbeatAt: new Date().toISOString(),
+      lastStatus: connectorStatus,
+      lastNote: body.note ?? null,
+      lastReachable: body.localServiceReachable ?? null,
+      connectorName: pairing.connectorName,
+      connectorVersion: body.version ?? pairing.connectorVersion,
+    }),
+  );
 
   const refreshed = await getTunnelRecord(env, tunnelId);
   return jsonResponse({
     ok: true,
     tunnel: refreshed ? serializeTunnelRecord(refreshed) : serializeTunnelRecord(existing),
+  });
+}
+
+async function handleCreatePairing(
+  request: Request,
+  env: Env,
+  session: OperatorSession,
+): Promise<Response> {
+  const body = (await request.json().catch(() => ({}))) as PairingCreateRequestBody;
+  const tunnelId = body.tunnelId?.trim();
+  if (!tunnelId) {
+    return badRequest("tunnelId is required.");
+  }
+
+  const tunnel = await getTunnelRecord(env, tunnelId);
+  if (!tunnel) {
+    return notFound("Tunnel record not found.");
+  }
+
+  const issued = await issuePairingSecret(env, body.expiresInSeconds ?? null);
+  const pairingId = await createPairingSession(env, {
+    tunnelId,
+    issuedBySubject: session.subject,
+    issuedByEmail: session.email,
+    pairingTokenHash: issued.pairingTokenHash,
+    expiresAt: issued.expiresAt,
+    metadataJson: JSON.stringify({
+      label: body.label?.trim() || null,
+      note: body.note?.trim() || null,
+      issuedByName: session.name,
+      issuedByMode: session.mode,
+    }),
+  });
+
+  const pairing = await getPairingSession(env, pairingId);
+  if (!pairing) {
+    return jsonResponse(
+      { error: "Pairing session was created but could not be loaded." },
+      { status: 500 },
+    );
+  }
+
+  return jsonResponse(
+    {
+      pairing: serializePairingSession(pairing),
+      pairingSecret: buildPairingSecretView(
+        request,
+        tunnel,
+        pairing,
+        issued.pairingToken,
+      ),
+    },
+    { status: 201 },
+  );
+}
+
+async function handleExchangePairing(
+  request: Request,
+  env: Env,
+  pairingId: string,
+): Promise<Response> {
+  const pairing = await getPairingSession(env, pairingId);
+  if (!pairing) return notFound("Pairing session not found.");
+  if (pairing.status !== "pending") {
+    return jsonResponse(
+      { error: "Pairing session is no longer available for exchange." },
+      { status: 409 },
+    );
+  }
+
+  const body = (await request.json().catch(() => ({}))) as PairingExchangeRequestBody;
+  const pairingToken = body.pairingToken?.trim();
+  if (!pairingToken) {
+    return badRequest("pairingToken is required.");
+  }
+
+  const tokenValid = await verifyOpaqueToken(pairingToken, pairing.pairingTokenHash);
+  if (!tokenValid) {
+    return jsonResponse(
+      { error: "Pairing token is invalid." },
+      { status: 403 },
+    );
+  }
+
+  const tunnel = await getTunnelRecord(env, pairing.tunnelId);
+  if (!tunnel) {
+    return notFound("Linked tunnel record not found.");
+  }
+
+  const secrets = await decryptTunnelSecretPayload(env, tunnel.secretEnvelopeJson);
+  const connectorSession = await issueConnectorSession(env);
+  const metadataJson = buildPairingMetadata(pairing.metadataJson, {
+    connectorName: body.connectorName?.trim() || null,
+    connectorVersion: body.connectorVersion?.trim() || null,
+    connectorNote: body.note?.trim() || null,
+  });
+
+  await revokeOtherActivePairingsForTunnel(env, tunnel.id, pairingId);
+  const activated = await activatePairingSession(env, pairingId, {
+    connectorTokenHash: connectorSession.connectorTokenHash,
+    connectorExpiresAt: connectorSession.expiresAt,
+    connectorName: body.connectorName?.trim() || null,
+    connectorVersion: body.connectorVersion?.trim() || null,
+    metadataJson,
+  });
+  if (!activated) {
+    return jsonResponse(
+      { error: "Pairing session was already exchanged or revoked." },
+      { status: 409 },
+    );
+  }
+
+  const refreshedPairing = await getPairingSession(env, pairingId);
+  if (!refreshedPairing) {
+    return jsonResponse(
+      { error: "Pairing exchange completed but could not be reloaded." },
+      { status: 500 },
+    );
+  }
+
+  return jsonResponse({
+    pairing: serializePairingSession(refreshedPairing),
+    tunnel: serializeTunnelRecord(tunnel),
+    bootstrap: buildConnectorBootstrapResponse(tunnel, secrets),
+    connectorSession: buildConnectorSessionView(
+      refreshedPairing.id,
+      connectorSession.connectorToken,
+      connectorSession.expiresAt,
+    ),
   });
 }
 
@@ -1259,6 +1511,7 @@ export default class EdgeIntelWorker extends WorkerEntrypoint<Env> {
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
     const path = url.pathname;
+    let operatorSession: OperatorSession | null = null;
 
     if (request.method === "GET" && path === "/health") {
       return jsonResponse({
@@ -1268,12 +1521,24 @@ export default class EdgeIntelWorker extends WorkerEntrypoint<Env> {
       });
     }
 
+    if (isOperatorControlPlaneRoute(request, path)) {
+      const session = await requireOperatorSession(request, this.env);
+      if (session instanceof Response) {
+        return session;
+      }
+      operatorSession = session;
+    }
+
     if (request.method === "GET" && (path === "/app" || path === "/app/providers")) {
       return handleProviderControlPlaneApp();
     }
 
     if (request.method === "GET" && path === "/app/tunnels") {
       return handleTunnelControlPlaneApp();
+    }
+
+    if (request.method === "GET" && path === "/api/session") {
+      return handleGetSession(operatorSession as OperatorSession);
     }
 
     if (request.method === "POST" && path === "/api/scan") {
@@ -1375,6 +1640,17 @@ export default class EdgeIntelWorker extends WorkerEntrypoint<Env> {
       /^\/api\/tunnels\/[^/]+\/heartbeat$/.test(path)
     ) {
       return handleTunnelHeartbeat(request, this.env, path.split("/")[3]);
+    }
+
+    if (request.method === "POST" && path === "/api/pairings") {
+      return handleCreatePairing(request, this.env, operatorSession as OperatorSession);
+    }
+
+    if (
+      request.method === "POST" &&
+      /^\/api\/pairings\/[^/]+\/exchange$/.test(path)
+    ) {
+      return handleExchangePairing(request, this.env, path.split("/")[3]);
     }
 
     if (request.method === "GET" && /^\/api\/domains\/[^/]+\/history$/.test(path)) {
