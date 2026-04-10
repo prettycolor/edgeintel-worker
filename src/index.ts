@@ -65,6 +65,7 @@ import {
   serializeProviderSetting,
   testProviderConnection,
 } from "./lib/provider-settings";
+import { renderProviderControlPlaneApp } from "./lib/app-shell";
 import {
   decryptProviderSecretPayload,
   encryptProviderSecretPayload,
@@ -325,6 +326,20 @@ async function handleInferenceCapabilities(env: Env): Promise<Response> {
   return jsonResponse({
     inference: getInferenceCapabilities(env),
   });
+}
+
+function handleProviderControlPlaneApp(): Response {
+  return new Response(
+    renderProviderControlPlaneApp({
+      providersEndpoint: "/api/settings/providers",
+    }),
+    {
+      headers: {
+        "content-type": "text/html; charset=utf-8",
+        "cache-control": "no-store",
+      },
+    },
+  );
 }
 
 async function handleListProviders(env: Env): Promise<Response> {
@@ -869,6 +884,10 @@ export default class EdgeIntelWorker extends WorkerEntrypoint<Env> {
         worker: "edgeintel-worker",
         timestamp: new Date().toISOString(),
       });
+    }
+
+    if (request.method === "GET" && (path === "/app" || path === "/app/providers")) {
+      return handleProviderControlPlaneApp();
     }
 
     if (request.method === "POST" && path === "/api/scan") {

@@ -15,6 +15,7 @@ Cloudflare-native domain posture and remediation engine for the `hostingtool.dev
 - `GET|POST|PATCH|DELETE /api/settings/providers` plus
   `POST /api/settings/providers/:id/test` for provider control-plane
   configuration, encrypted secret storage, and connection testing
+- `GET /app` and `GET /app/providers` for the Worker-served provider control-plane UI
 - `POST /api/scans/:scanRunId/ai-brief` to generate an evidence-bounded AI
   brief from persisted findings and recommendations
 - Durable Object job coordination with job snapshots and event streaming
@@ -138,6 +139,8 @@ path. Start with [docs/hybrid-inference.md](./docs/hybrid-inference.md).
 
 Phase 7A now adds the provider control-plane backend needed for the upcoming
 hosted-provider settings UI and local-model tunnel wizard.
+
+Phase 7B adds the first Worker-served app-shell surface at `/app/providers`.
 
 ## Current Scope
 
