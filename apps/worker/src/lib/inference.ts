@@ -124,6 +124,10 @@ export function buildOpenAiCompatibleChatUrl(baseUrl: string): string {
     return normalized;
   }
 
+  if (/\/openai$/i.test(normalized)) {
+    return `${normalized}/chat/completions`;
+  }
+
   if (normalized.includes("/v1/") || /\/v1$/i.test(normalized)) {
     return `${normalized}/chat/completions`;
   }

@@ -64,6 +64,9 @@ function toProviderSetting(
     displayName: String(row.display_name),
     baseUrl: (row.base_url as string | null) ?? null,
     defaultModel: (row.default_model as string | null) ?? null,
+    authStrategy:
+      (row.auth_strategy as PersistedProviderSetting["authStrategy"] | null) ??
+      "api-key",
     usesAiGateway: Number(row.uses_ai_gateway ?? 0) === 1,
     oauthConnected: Number(row.oauth_connected ?? 0) === 1,
     status: String(row.status) as PersistedProviderSetting["status"],
@@ -602,6 +605,7 @@ export async function createProviderSetting(
     displayName: string;
     baseUrl: string | null;
     defaultModel: string | null;
+    authStrategy: PersistedProviderSetting["authStrategy"];
     usesAiGateway: boolean;
     oauthConnected: boolean;
     status: PersistedProviderSetting["status"];
@@ -615,9 +619,9 @@ export async function createProviderSetting(
   await env.EDGE_DB.prepare(
     `INSERT INTO provider_settings (
       id, kind, provider_code, display_name, base_url, default_model,
-      uses_ai_gateway, oauth_connected, status, secret_envelope_json,
+      auth_strategy, uses_ai_gateway, oauth_connected, status, secret_envelope_json,
       metadata_json, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   )
     .bind(
       providerId,
@@ -626,6 +630,7 @@ export async function createProviderSetting(
       input.displayName,
       input.baseUrl,
       input.defaultModel,
+      input.authStrategy,
       input.usesAiGateway ? 1 : 0,
       input.oauthConnected ? 1 : 0,
       input.status,
@@ -648,6 +653,7 @@ export async function updateProviderSetting(
     displayName: string;
     baseUrl: string | null;
     defaultModel: string | null;
+    authStrategy: PersistedProviderSetting["authStrategy"];
     usesAiGateway: boolean;
     oauthConnected: boolean;
     status: PersistedProviderSetting["status"];
@@ -662,6 +668,7 @@ export async function updateProviderSetting(
          display_name = ?,
          base_url = ?,
          default_model = ?,
+         auth_strategy = ?,
          uses_ai_gateway = ?,
          oauth_connected = ?,
          status = ?,
@@ -676,6 +683,7 @@ export async function updateProviderSetting(
       input.displayName,
       input.baseUrl,
       input.defaultModel,
+      input.authStrategy,
       input.usesAiGateway ? 1 : 0,
       input.oauthConnected ? 1 : 0,
       input.status,

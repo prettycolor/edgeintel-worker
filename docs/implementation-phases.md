@@ -51,6 +51,12 @@ The goal of the next buildout is not to re-architect from scratch. It is to hard
   - `cloudflared` can be detected from the machine or installed into an app-managed path from the official Cloudflare release feed
   - desktop runtime controls now supervise `cloudflared`, probe the local service, and send connector heartbeats back to EdgeIntel
   - desktop tests and packaging smoke checks now gate the phase alongside the repo-wide verification flow
+- Phase 13 provider auth matrix and credential UX is implemented:
+  - `/api/settings/provider-catalog` exposes the supported provider presets and auth strategies
+  - provider records now persist `authStrategy` explicitly instead of relying on an implied OAuth checkbox
+  - `/app/providers` now shows provider capability notes, supported auth paths, secret health summaries, and secret-clearing controls
+  - provider tests now treat unsupported auth modes as explicit warnings instead of pretending every provider supports the same flow
+  - Gemini and OpenRouter are now first-class API-key presets beside OpenAI, Anthropic, Workers AI, Ollama, and custom OpenAI-compatible routes
 
 ## Execution Protocol
 

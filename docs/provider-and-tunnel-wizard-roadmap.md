@@ -22,18 +22,24 @@ Implemented now:
 
 Not implemented yet:
 
-- provider OAuth onboarding
 - local-machine installation of `cloudflared`
 - packaged desktop or tray wrapper around the reference connector
 
 Implemented since the original draft:
 
 - user-facing provider settings UI at `/app/providers`
+- provider capability catalog plus explicit auth-strategy modeling
 - automatic Cloudflare Tunnel creation from the app
 - tunnel DNS and Access orchestration through the Worker API
 - user-facing tunnel wizard UI at `/app/tunnels`
 - connection testing and persisted tunnel health from the app
 - reference connector runtime with heartbeat support
+
+Clarification after Phase 13:
+
+- EdgeIntel is now explicitly API-key-first and binding-first for hosted providers.
+- OAuth is not treated as a universal provider feature.
+- Optional provider-specific OAuth can still be added later, but only when a concrete provider flow is worth the extra surface area.
 
 ## Hard Platform Boundary
 
@@ -65,7 +71,8 @@ Build a two-part onboarding architecture:
   - Worker APIs
   - D1 persistence
   - encrypted provider settings
-  - OAuth callbacks
+  - provider capability catalog
+  - auth-strategy-aware validation
   - Tunnel orchestration
   - Access policy orchestration
   - health checks
@@ -107,7 +114,8 @@ The target setup flow should be:
 2. User chooses `Hosted Provider` or `Local Model`.
 3. Hosted flow:
    - choose provider
-   - connect with API key or OAuth where supported
+   - choose the provider's supported auth path
+   - connect with API key or binding-backed auth by default
    - run connection test
    - save as active route
 4. Local flow:
@@ -139,19 +147,20 @@ Recommended provider record shape:
 - `id`
 - `kind`
   - `hosted-api-key`
-  - `hosted-oauth`
   - `local-direct`
   - `local-gateway`
 - `providerCode`
   - `openai`
   - `anthropic`
-  - `google-ai-studio`
+  - `gemini`
+  - `openrouter`
   - `workers-ai`
   - `ollama`
   - `custom-openai-compatible`
 - `displayName`
 - `defaultModel`
 - `baseUrl`
+- `authStrategy`
 - `usesAiGateway`
 - `oauthConnected`
 - `status`
@@ -177,19 +186,21 @@ This is the simplest practical single-environment design for EdgeIntel.
 
 Support two modes:
 
-- API key
-- OAuth where the provider actually supports a usable delegated flow
+- explicit provider auth strategy
+- API key as the default hosted path
+- Workers binding where the provider is first-party (`Workers AI`)
 
 Important product rule:
 
 - API key entry is the universal path.
-- OAuth is optional and provider-specific, not universal.
+- OAuth is optional and provider-specific, not universal, and it is not on the critical path for EdgeIntel.
 
 For frontier providers, the likely practical default is:
 
 - OpenAI: API key
 - Anthropic: API key
-- Google AI / Vertex: API key, OAuth, or service account style flows depending on the exact product
+- Gemini: API key through the OpenAI-compatible endpoint
+- OpenRouter: API key
 - Workers AI: no third-party OAuth needed
 
 ### 4. Tunnel orchestration service
@@ -279,7 +290,7 @@ Local:
 Hosted:
 
 - API key
-- OAuth if supported
+- supported auth strategy for that provider
 
 Local:
 
@@ -376,7 +387,7 @@ Deliver:
 
 - settings UI
 - API key forms
-- optional OAuth routes where supported
+- optional provider-specific OAuth routes only where there is a real product reason
 - provider health views
 
 ### Phase 7C: Tunnel orchestration backend

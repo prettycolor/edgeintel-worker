@@ -13,8 +13,11 @@ Cloudflare-native domain posture and remediation engine for the `hostingtool.dev
 - `GET /api/inference/capabilities` to inspect the configured hosted and
   local-model inference routes
 - `GET|POST|PATCH|DELETE /api/settings/providers` plus
-  `POST /api/settings/providers/:id/test` for provider control-plane
-  configuration, encrypted secret storage, and connection testing
+  `GET /api/settings/provider-catalog`,
+  `POST /api/settings/providers/:id/test`, and
+  `DELETE /api/settings/providers/:id/secret` for provider control-plane
+  configuration, encrypted secret storage, auth-strategy-aware diagnostics,
+  and connection testing
 - `GET|POST|PATCH|DELETE /api/tunnels` plus
   `POST /api/tunnels/:id/test`,
   `POST /api/tunnels/:id/rotate-token`, and
@@ -64,8 +67,14 @@ Cloudflare-native domain posture and remediation engine for the `hostingtool.dev
 - Provider control-plane foundations with:
   - D1-backed provider settings records
   - AES-GCM envelope encryption for stored provider secrets
+  - provider capability presets for OpenAI, Anthropic, Gemini, OpenRouter,
+    Workers AI, Ollama, and custom OpenAI-compatible routes
+  - explicit auth strategies (`api-key`, `workers-binding`, or `none`) instead
+    of implying a universal OAuth flow
   - per-provider connection testing for Workers AI, Anthropic, and
     OpenAI-compatible routes
+  - secret health summaries that distinguish upstream auth posture from
+    Cloudflare Access service-token posture
   - persisted test status and result history for the app shell
 - Tunnel orchestration foundations with:
   - remotely managed Cloudflare Tunnel provisioning
@@ -217,6 +226,14 @@ Phase 12 now adds:
 - runtime supervision, local service probing, and heartbeat reporting without CLI use
 - tray-aware diagnostics and a desktop setup workspace for pairing, install, test, start, and stop
 
+Phase 13 now adds:
+
+- a provider capability catalog endpoint for the control plane
+- an auth-strategy-aware provider UX in `/app/providers`
+- explicit credential posture summaries and supported-auth guidance per provider
+- secret clearing from the operator workspace without deleting the provider record
+- Gemini and OpenRouter as first-class API-key presets alongside OpenAI, Anthropic, Workers AI, Ollama, and custom OpenAI-compatible routes
+
 ## Current Scope
 
 This is the phase-0/1 implementation slice:
@@ -243,7 +260,7 @@ For the next onboarding-focused expansion, see
 
 For the local-model setup flow, start with
 [docs/local-model-route-quickstart.md](./docs/local-model-route-quickstart.md)
-and [connector/README.md](./connector/README.md).
+and [packages/connector-core/README.md](./packages/connector-core/README.md).
 
 UI direction prototypes for Phase 7 live in [docs/mockups/README.md](./docs/mockups/README.md).
 

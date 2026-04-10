@@ -27,6 +27,18 @@ export type ProviderKind =
   | "hosted-oauth"
   | "local-direct"
   | "local-gateway";
+export type ProviderAuthStrategy =
+  | "api-key"
+  | "oauth"
+  | "workers-binding"
+  | "none";
+export type ProviderSecretField =
+  | "apiKey"
+  | "gatewayToken"
+  | "accessClientId"
+  | "accessClientSecret"
+  | "oauthAccessToken"
+  | "oauthRefreshToken";
 export type ProviderStatus = "draft" | "ready" | "error" | "disabled";
 export type ProviderTestStatus = "passed" | "failed" | "warning";
 export type TunnelStatus = "draft" | "provisioning" | "ready" | "error" | "deleting";
@@ -75,6 +87,7 @@ export interface ProviderSettingsRequestBody {
   displayName?: string;
   baseUrl?: string | null;
   defaultModel?: string | null;
+  authStrategy?: ProviderAuthStrategy;
   usesAiGateway?: boolean;
   oauthConnected?: boolean;
   status?: ProviderStatus;
@@ -330,6 +343,46 @@ export interface ProviderConnectionTestResult {
   testedAt: string;
 }
 
+export interface ProviderCapabilityAuthOption {
+  strategy: ProviderAuthStrategy;
+  label: string;
+  description: string;
+  requiredSecretFields: ProviderSecretField[];
+  optionalSecretFields: ProviderSecretField[];
+  recommended: boolean;
+}
+
+export interface ProviderCapabilityView {
+  providerCode: string;
+  title: string;
+  category: "frontier" | "self-hosted" | "gateway" | "first-party";
+  description: string;
+  supportedKinds: ProviderKind[];
+  recommendedKind: ProviderKind;
+  defaultBaseUrl: string | null;
+  modelPlaceholder: string | null;
+  supportsAiGateway: boolean;
+  authOptions: ProviderCapabilityAuthOption[];
+  connectionTest: {
+    transport: string;
+    summary: string;
+    billable: boolean;
+  };
+  notes: string[];
+}
+
+export interface ProviderSecretHealthView {
+  authStrategy: ProviderAuthStrategy;
+  requiredSecretFields: ProviderSecretField[];
+  optionalSecretFields: ProviderSecretField[];
+  configuredSecretFields: ProviderSecretField[];
+  missingRequiredSecretFields: ProviderSecretField[];
+  requiresAccessHeaders: boolean;
+  accessHeadersConfigured: boolean;
+  canRunConnectionTest: boolean;
+  summary: string;
+}
+
 export interface TunnelConnectionTestResult {
   status: TunnelTestStatus;
   message: string;
@@ -438,6 +491,7 @@ export interface PersistedProviderSetting {
   displayName: string;
   baseUrl: string | null;
   defaultModel: string | null;
+  authStrategy: ProviderAuthStrategy;
   usesAiGateway: boolean;
   oauthConnected: boolean;
   status: ProviderStatus;
@@ -486,6 +540,28 @@ export interface PersistedTunnelRecord {
   lastTestStatus: TunnelTestStatus | null;
   lastTestResultJson: string | null;
   metadataJson: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ProviderSettingView {
+  id: string;
+  kind: ProviderKind;
+  providerCode: string;
+  displayName: string;
+  baseUrl: string | null;
+  defaultModel: string | null;
+  authStrategy: ProviderAuthStrategy;
+  usesAiGateway: boolean;
+  oauthConnected: boolean;
+  status: ProviderStatus;
+  secretConfigured: boolean;
+  lastTestedAt: string | null;
+  lastTestStatus: ProviderTestStatus | null;
+  lastTestResult: ProviderConnectionTestResult | null;
+  capability: ProviderCapabilityView;
+  secretHealth: ProviderSecretHealthView;
+  metadata: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;
 }

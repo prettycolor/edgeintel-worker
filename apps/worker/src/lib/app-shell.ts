@@ -1,5 +1,6 @@
 interface ProviderAppConfig {
   providersEndpoint: string;
+  providerCatalogEndpoint: string;
 }
 
 const APP_STYLES = `
@@ -587,6 +588,12 @@ const APP_STYLES = `
     color: rgba(255, 255, 255, 0.38);
   }
 
+  .field-hint {
+    font-size: 12px;
+    line-height: 1.6;
+    color: rgba(255, 255, 255, 0.52);
+  }
+
   .field-wide textarea {
     min-height: 74px;
     resize: vertical;
@@ -668,6 +675,49 @@ const APP_STYLES = `
     opacity: 0.46;
     cursor: default;
     transform: none;
+  }
+
+  .capability-panel,
+  .auth-panel {
+    border-radius: 18px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.04);
+    padding: 14px;
+  }
+
+  .chip-row {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 10px;
+  }
+
+  .mini-chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 7px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    background: rgba(255, 255, 255, 0.08);
+    color: white;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .mini-chip.recommended {
+    background: rgba(142, 240, 97, 0.12);
+    border-color: rgba(142, 240, 97, 0.22);
+  }
+
+  .mini-chip.warning {
+    background: rgba(255, 174, 109, 0.12);
+    border-color: rgba(255, 174, 109, 0.24);
+  }
+
+  .capability-list {
+    margin: 12px 0 0;
+    padding-left: 18px;
+    color: rgba(255, 255, 255, 0.68);
+    line-height: 1.6;
   }
 
   .notice {
@@ -756,11 +806,14 @@ const APP_STYLES = `
 const APP_SCRIPT = `
   const config = window.EDGEINTEL_APP;
   const state = {
+    catalog: [],
     providers: [],
     selectedId: null,
     testingId: null,
     saving: false,
     deleting: false,
+    clearingSecretId: null,
+    draftPresetCode: "openai",
     notice: null
   };
 
@@ -772,10 +825,14 @@ const APP_SCRIPT = `
     deleteButton: document.getElementById("delete-provider"),
     testButton: document.getElementById("test-provider"),
     resetButton: document.getElementById("reset-provider"),
+    clearSecretButton: document.getElementById("clear-provider-secret"),
     notice: document.getElementById("provider-notice"),
     diagnostics: document.getElementById("provider-diagnostics"),
     diagnosticsMeta: document.getElementById("provider-diagnostics-meta"),
     diagnosticsCode: document.getElementById("provider-diagnostics-code"),
+    presetSelect: document.getElementById("providerPreset"),
+    capabilityPanel: document.getElementById("provider-capability"),
+    authPanel: document.getElementById("provider-auth-guidance"),
     statTotal: document.getElementById("stat-total-providers"),
     statReady: document.getElementById("stat-ready-providers"),
     statLocal: document.getElementById("stat-local-providers"),
@@ -798,6 +855,72 @@ const APP_SCRIPT = `
 
   function isLocalKind(kind) {
     return kind === "local-direct" || kind === "local-gateway";
+  }
+
+  function providerCapability(providerCode, kind) {
+    const normalizedCode = String(providerCode || "custom-openai-compatible").trim().toLowerCase();
+    const found = state.catalog.find(function(entry) {
+      return entry.providerCode === normalizedCode;
+    });
+
+    if (found) return found;
+
+    const fallback = state.catalog.find(function(entry) {
+      return entry.providerCode === "custom-openai-compatible";
+    });
+
+    if (!fallback) {
+      return {
+        providerCode: normalizedCode,
+        title: normalizedCode,
+        description: "Custom provider",
+        supportedKinds: [kind || "hosted-api-key"],
+        recommendedKind: kind || "hosted-api-key",
+        defaultBaseUrl: null,
+        modelPlaceholder: null,
+        supportsAiGateway: true,
+        authOptions: [
+          {
+            strategy: "api-key",
+            label: "API key",
+            description: "Use a bearer token for custom OpenAI-compatible routes.",
+            requiredSecretFields: ["apiKey"],
+            optionalSecretFields: ["accessClientId", "accessClientSecret"],
+            recommended: true
+          }
+        ],
+        connectionTest: {
+          transport: "openai-compatible-models",
+          summary: "Model inventory request against the configured endpoint.",
+          billable: false
+        },
+        notes: ["EdgeIntel treats unknown providers as custom OpenAI-compatible routes."]
+      };
+    }
+
+    return {
+      ...fallback,
+      providerCode: normalizedCode,
+      title: normalizedCode
+        .split(/[-_]/g)
+        .filter(Boolean)
+        .map(function(part) {
+          return part.charAt(0).toUpperCase() + part.slice(1);
+        })
+        .join(" ")
+    };
+  }
+
+  function authOption(capability, strategy) {
+    return capability.authOptions.find(function(option) {
+      return option.strategy === strategy;
+    }) || capability.authOptions[0] || null;
+  }
+
+  function defaultAuthStrategy(capability) {
+    return capability.authOptions.find(function(option) {
+      return option.recommended;
+    })?.strategy || capability.authOptions[0]?.strategy || "api-key";
   }
 
   function providerStatus(provider) {
@@ -843,24 +966,115 @@ const APP_SCRIPT = `
     return state.providers.find((provider) => provider.id === state.selectedId) || null;
   }
 
+  function syncAuthOptions(capability, selectedStrategy) {
+    const authSelect = ui.providerForm.elements.authStrategy;
+    const options = capability.authOptions
+      .map(function(option) {
+        return '<option value="' + escapeHtml(option.strategy) + '"' +
+          (option.strategy === selectedStrategy ? ' selected' : '') + '>' +
+          escapeHtml(option.label) + '</option>';
+      })
+      .join("");
+    authSelect.innerHTML = options;
+  }
+
+  function renderCapabilityPanel(capability, provider) {
+    const authChips = capability.authOptions
+      .map(function(option) {
+        return '<span class="mini-chip' + (option.recommended ? ' recommended' : '') + '">' +
+          escapeHtml(option.label) + '</span>';
+      })
+      .join("");
+    const notes = capability.notes
+      .map(function(note) {
+        return '<li>' + escapeHtml(note) + '</li>';
+      })
+      .join("");
+    ui.capabilityPanel.innerHTML =
+      '<div><strong>' + escapeHtml(capability.title) + '</strong><div class="field-hint">' +
+      escapeHtml(capability.description) + '</div></div>' +
+      '<div class="chip-row">' + authChips + '</div>' +
+      '<ul class="capability-list">' +
+      '<li>Recommended kind: ' + escapeHtml(capability.recommendedKind) + '</li>' +
+      '<li>Connection test: ' + escapeHtml(capability.connectionTest.summary) + '</li>' +
+      '<li>AI Gateway: ' + escapeHtml(capability.supportsAiGateway ? "supported" : "not required") + '</li>' +
+      (provider?.secretHealth?.summary
+        ? '<li>Secret health: ' + escapeHtml(provider.secretHealth.summary) + '</li>'
+        : "") +
+      notes +
+      '</ul>';
+  }
+
+  function renderAuthPanel(capability, provider) {
+    const authStrategy = ui.providerForm.elements.authStrategy.value || defaultAuthStrategy(capability);
+    const option = authOption(capability, authStrategy);
+    const accessProtected = provider?.secretHealth?.requiresAccessHeaders || false;
+    const missing = provider?.secretHealth?.missingRequiredSecretFields || [];
+    ui.authPanel.innerHTML = option
+      ? '<div><strong>' + escapeHtml(option.label) + '</strong><div class="field-hint">' +
+        escapeHtml(option.description) + '</div></div>' +
+        '<div class="chip-row">' +
+        option.requiredSecretFields.map(function(field) {
+          return '<span class="mini-chip recommended">' + escapeHtml(field) + '</span>';
+        }).join("") +
+        option.optionalSecretFields.map(function(field) {
+          return '<span class="mini-chip">' + escapeHtml(field) + '</span>';
+        }).join("") +
+        (accessProtected ? '<span class="mini-chip warning">Access headers expected</span>' : '') +
+        '</div>' +
+        '<ul class="capability-list">' +
+        '<li>Primary auth strategy: ' + escapeHtml(authStrategy) + '</li>' +
+        '<li>Required secrets: ' + escapeHtml(option.requiredSecretFields.length ? option.requiredSecretFields.join(", ") : "none") + '</li>' +
+        '<li>Optional extras: ' + escapeHtml(option.optionalSecretFields.length ? option.optionalSecretFields.join(", ") : "none") + '</li>' +
+        '<li>' + escapeHtml(missing.length ? "Missing required secrets: " + missing.join(", ") : "Selected auth path is satisfiable with the currently stored secrets.") + '</li>' +
+        '</ul>'
+      : '<div class="field-hint">No supported auth path is defined for this provider yet.</div>';
+  }
+
+  function resetSecretFields() {
+    ui.providerForm.elements.apiKey.value = "";
+    ui.providerForm.elements.accessClientId.value = "";
+    ui.providerForm.elements.accessClientSecret.value = "";
+  }
+
+  function applyPreset(presetCode, provider) {
+    const capability = providerCapability(presetCode, provider?.kind || ui.providerForm.elements.kind.value);
+    state.draftPresetCode = capability.providerCode;
+    ui.presetSelect.value = capability.providerCode;
+    ui.providerForm.elements.providerCode.value = capability.providerCode;
+
+    if (!provider) {
+      ui.providerForm.elements.kind.value = capability.recommendedKind;
+      ui.providerForm.elements.displayName.value = capability.title;
+      ui.providerForm.elements.baseUrl.value = capability.defaultBaseUrl || "";
+      ui.providerForm.elements.defaultModel.value = "";
+      ui.providerForm.elements.usesAiGateway.checked = capability.supportsAiGateway && capability.providerCode !== "openrouter";
+    }
+
+    ui.providerForm.elements.defaultModel.placeholder = capability.modelPlaceholder || "Model identifier";
+
+    syncAuthOptions(capability, provider?.authStrategy || defaultAuthStrategy(capability));
+    renderCapabilityPanel(capability, provider || null);
+    renderAuthPanel(capability, provider || null);
+  }
+
   function populateForm(provider) {
     ui.providerForm.elements.providerId.value = provider?.id || "";
     ui.providerForm.elements.kind.value = provider?.kind || "hosted-api-key";
-    ui.providerForm.elements.providerCode.value = provider?.providerCode || "";
+    ui.providerForm.elements.providerCode.value = provider?.providerCode || state.draftPresetCode;
     ui.providerForm.elements.displayName.value = provider?.displayName || "";
     ui.providerForm.elements.baseUrl.value = provider?.baseUrl || "";
     ui.providerForm.elements.defaultModel.value = provider?.defaultModel || "";
     ui.providerForm.elements.usesAiGateway.checked = Boolean(provider?.usesAiGateway);
-    ui.providerForm.elements.oauthConnected.checked = Boolean(provider?.oauthConnected);
     ui.providerForm.elements.status.value = provider?.status || "draft";
     ui.providerForm.elements.metadataJson.value = provider?.metadata
       ? JSON.stringify(provider.metadata, null, 2)
       : "";
-    ui.providerForm.elements.apiKey.value = "";
-    ui.providerForm.elements.accessClientId.value = "";
-    ui.providerForm.elements.accessClientSecret.value = "";
+    resetSecretFields();
     ui.providerSelectMode.textContent = provider ? "Update selected provider" : "Create provider";
     ui.deleteButton.disabled = !provider || state.deleting;
+    ui.clearSecretButton.disabled = !provider || !provider.secretConfigured || state.clearingSecretId === provider?.id;
+    applyPreset(provider?.providerCode || state.draftPresetCode, provider || null);
   }
 
   function renderStats() {
@@ -879,13 +1093,11 @@ const APP_SCRIPT = `
 
   function renderRuntimeSummary(provider) {
     const target = provider || state.providers[0] || null;
-    ui.runtimeRoute.textContent = target ? target.kind : "No provider";
+    ui.runtimeRoute.textContent = target ? target.capability.title : "No provider";
     ui.runtimeHost.textContent = target?.baseUrl || "Pending";
     ui.runtimeModel.textContent = target?.defaultModel || "Unset";
-    ui.runtimeProtection.textContent = target?.secretConfigured
-      ? target?.metadata?.accessProtected
-        ? "Access"
-        : "Managed"
+    ui.runtimeProtection.textContent = target
+      ? target.authStrategy + (target.secretHealth.requiresAccessHeaders ? " + access" : "")
       : "Open";
   }
 
@@ -910,16 +1122,25 @@ const APP_SCRIPT = `
         helper: result?.targetUrl || provider.baseUrl || "No target URL stored"
       },
       {
-        title: "Secret posture",
-        detail: provider.secretConfigured ? "Encrypted secrets configured" : "No encrypted secret stored",
-        helper: provider.usesAiGateway ? "AI Gateway enabled for this provider." : "Direct provider routing."
+        title: "Auth path",
+        detail: provider.authStrategy,
+        helper: provider.capability.authOptions.map(function(option) {
+          return option.label;
+        }).join(" · ")
       },
       {
-        title: "Model path",
-        detail: provider.defaultModel || "No default model configured",
-        helper: isLocalKind(provider.kind)
-          ? "Local routes should stay behind Tunnel or another HTTPS edge."
-          : "Hosted routes can use API key or OAuth flows later."
+        title: "Secret posture",
+        detail: provider.secretHealth.summary,
+        helper: provider.secretHealth.configuredSecretFields.length
+          ? "Configured: " + provider.secretHealth.configuredSecretFields.join(", ")
+          : "No secret material stored yet"
+      },
+      {
+        title: "Connection test",
+        detail: provider.capability.connectionTest.summary,
+        helper: provider.capability.connectionTest.billable
+          ? "This test path makes a small billable request."
+          : "This test path is expected to be non-billable."
       }
     ];
 
@@ -933,6 +1154,8 @@ const APP_SCRIPT = `
     ui.diagnosticsCode.textContent = JSON.stringify(
       {
         providerId: provider.id,
+        capability: provider.capability,
+        secretHealth: provider.secretHealth,
         lastTestResult: result,
         metadata: provider.metadata
       },
@@ -954,9 +1177,9 @@ const APP_SCRIPT = `
         const isActive = provider.id === state.selectedId;
         const testing = state.testingId === provider.id;
         const subtitle = [
-          provider.defaultModel || "Model unset",
-          provider.kind,
-          provider.secretConfigured ? "secret present" : "no secret"
+          provider.capability.title,
+          provider.authStrategy,
+          provider.secretHealth.summary
         ].join(" · ");
         return '<button class="provider-row' + (isActive ? ' active' : '') + '" type="button" data-provider-id="' +
           escapeHtml(provider.id) + '">' +
@@ -998,6 +1221,26 @@ const APP_SCRIPT = `
     render();
   }
 
+  async function loadCatalog() {
+    const response = await fetch(config.providerCatalogEndpoint, {
+      headers: { Accept: "application/json" }
+    });
+    const payload = await response.json();
+    if (!response.ok) {
+      throw new Error(payload?.error || "Failed to load provider catalog.");
+    }
+    state.catalog = payload.catalog || [];
+    ui.presetSelect.innerHTML = state.catalog
+      .map(function(entry) {
+        return '<option value="' + escapeHtml(entry.providerCode) + '">' +
+          escapeHtml(entry.title) + '</option>';
+      })
+      .join("");
+    if (state.catalog.length && !state.draftPresetCode) {
+      state.draftPresetCode = state.catalog[0].providerCode;
+    }
+  }
+
   function formPayload() {
     let metadata = {};
     const metadataValue = ui.providerForm.elements.metadataJson.value.trim();
@@ -1022,8 +1265,8 @@ const APP_SCRIPT = `
       displayName: ui.providerForm.elements.displayName.value.trim(),
       baseUrl: ui.providerForm.elements.baseUrl.value.trim() || null,
       defaultModel: ui.providerForm.elements.defaultModel.value.trim() || null,
+      authStrategy: ui.providerForm.elements.authStrategy.value,
       usesAiGateway: ui.providerForm.elements.usesAiGateway.checked,
-      oauthConnected: ui.providerForm.elements.oauthConnected.checked,
       status: ui.providerForm.elements.status.value,
       metadata: metadata,
       secret: Object.keys(secret).length ? secret : undefined
@@ -1147,6 +1390,41 @@ const APP_SCRIPT = `
     }
   }
 
+  async function clearSelectedProviderSecret() {
+    const provider = selectedProvider();
+    if (!provider) return;
+    state.clearingSecretId = provider.id;
+    state.notice = null;
+    render();
+
+    try {
+      const response = await fetch(
+        config.providersEndpoint + "/" + encodeURIComponent(provider.id) + "/secret",
+        {
+          method: "DELETE",
+          headers: { Accept: "application/json" }
+        }
+      );
+      const payload = await response.json();
+      if (!response.ok) {
+        throw new Error(payload?.error || "Secret clear failed.");
+      }
+      state.notice = {
+        tone: "info",
+        message: "Stored provider secrets cleared."
+      };
+      await loadProviders(provider.id);
+    } catch (error) {
+      state.notice = {
+        tone: "error",
+        message: error instanceof Error ? error.message : "Secret clear failed."
+      };
+      render();
+    } finally {
+      state.clearingSecretId = null;
+    }
+  }
+
   ui.providerList.addEventListener("click", function(event) {
     const target = event.target instanceof HTMLElement
       ? event.target.closest("[data-provider-id]")
@@ -1162,8 +1440,27 @@ const APP_SCRIPT = `
   ui.providerForm.addEventListener("submit", saveProvider);
   ui.testButton.addEventListener("click", testSelectedProvider);
   ui.deleteButton.addEventListener("click", deleteSelectedProvider);
+  ui.clearSecretButton.addEventListener("click", clearSelectedProviderSecret);
+  ui.presetSelect.addEventListener("change", function() {
+    if (selectedProvider()) return;
+    applyPreset(ui.presetSelect.value, null);
+  });
+  ui.providerForm.elements.providerCode.addEventListener("change", function() {
+    applyPreset(ui.providerForm.elements.providerCode.value.trim() || "custom-openai-compatible", selectedProvider());
+  });
+  ui.providerForm.elements.kind.addEventListener("change", function() {
+    applyPreset(ui.providerForm.elements.providerCode.value.trim() || state.draftPresetCode, selectedProvider());
+  });
+  ui.providerForm.elements.authStrategy.addEventListener("change", function() {
+    const capability = providerCapability(
+      ui.providerForm.elements.providerCode.value.trim() || state.draftPresetCode,
+      ui.providerForm.elements.kind.value
+    );
+    renderAuthPanel(capability, selectedProvider());
+  });
   ui.resetButton.addEventListener("click", function() {
     state.selectedId = null;
+    state.draftPresetCode = "openai";
     state.notice = {
       tone: "info",
       message: "Create mode ready."
@@ -1171,13 +1468,17 @@ const APP_SCRIPT = `
     render();
   });
 
-  loadProviders().catch(function(error) {
-    state.notice = {
-      tone: "error",
-      message: error instanceof Error ? error.message : "Failed to load providers."
-    };
-    render();
-  });
+  Promise.all([loadCatalog(), loadProviders()])
+    .then(function() {
+      render();
+    })
+    .catch(function(error) {
+      state.notice = {
+        tone: "error",
+        message: error instanceof Error ? error.message : "Failed to load providers."
+      };
+      render();
+    });
 `;
 
 export function renderProviderControlPlaneApp(
@@ -1273,13 +1574,13 @@ export function renderProviderControlPlaneApp(
 
           <section class="hero-row">
             <article class="surface">
-              <div class="eyebrow">Phase 7B</div>
-              <h2>Provider onboarding now lives inside the Worker app.</h2>
+              <div class="eyebrow">Phase 13</div>
+              <h2>Provider auth is now explicit, testable, and capability-driven.</h2>
               <p>
-                This surface is the operational bridge between hosted frontier
-                models, self-hosted Ollama or Gemma routes, and the tunnel wizard
-                that follows. The control plane is real: it is backed by D1,
-                encrypted secret storage, and live connection-test APIs.
+                This surface now distinguishes route kind, provider preset,
+                primary auth path, Access posture, and test strategy. Operators
+                should never have to guess whether a provider expects an API key,
+                a Workers binding, or no upstream secret at all.
               </p>
               <div class="stat-strip">
                 <div class="stat">
@@ -1367,9 +1668,9 @@ export function renderProviderControlPlaneApp(
                   <div class="eyebrow">Settings</div>
                   <h3 id="provider-mode">Create provider</h3>
                   <p class="panel-note">
-                    This is the hosted-provider control plane first. Tunnel
-                    orchestration and connector pairing land next on top of the
-                    same app shell.
+                    The provider record is now capability-driven. Pick a preset,
+                    confirm the route kind, choose the primary auth strategy,
+                    and only then enter the secrets that actually belong to that path.
                   </p>
                 </div>
                 <div class="status-live">app shell</div>
@@ -1378,20 +1679,20 @@ export function renderProviderControlPlaneApp(
               <div class="step-grid">
                 <div class="step-list">
                   <div class="step active">
-                    <strong>Store provider</strong>
-                    <span>Persist route metadata and encrypted secrets.</span>
+                    <strong>Choose capability</strong>
+                    <span>Select the provider preset and route kind that match reality.</span>
+                  </div>
+                  <div class="step">
+                    <strong>Set auth path</strong>
+                    <span>API key, Workers binding, or no upstream secret.</span>
                   </div>
                   <div class="step">
                     <strong>Run test</strong>
-                    <span>Verify auth, model inventory, and route readiness.</span>
+                    <span>Verify auth, target URL, and route readiness.</span>
                   </div>
                   <div class="step">
-                    <strong>Provision tunnel</strong>
+                    <strong>Link tunnel</strong>
                     <span>Attach hostname and Access once the route is stable.</span>
-                  </div>
-                  <div class="step">
-                    <strong>Connector health</strong>
-                    <span>Track heartbeats and recover local routes cleanly.</span>
                   </div>
                 </div>
 
@@ -1401,13 +1702,18 @@ export function renderProviderControlPlaneApp(
 
                   <div class="field-grid">
                     <div class="field">
+                      <label for="providerPreset">Provider preset</label>
+                      <select id="providerPreset" name="providerPreset"></select>
+                    </div>
+
+                    <div class="field">
                       <label for="kind">Provider kind</label>
                       <select id="kind" name="kind">
                         <option value="hosted-api-key">Hosted API key</option>
-                        <option value="hosted-oauth">Hosted OAuth</option>
                         <option value="local-direct">Local direct</option>
                         <option value="local-gateway">Local gateway</option>
                       </select>
+                      <div class="field-hint">Route shape, not credential type.</div>
                     </div>
 
                     <div class="field">
@@ -1425,6 +1731,7 @@ export function renderProviderControlPlaneApp(
                     <div class="field">
                       <label for="providerCode">Provider code</label>
                       <input id="providerCode" name="providerCode" placeholder="openai, anthropic, ollama, workers-ai" required />
+                      <div class="field-hint">Editable for advanced custom routes.</div>
                     </div>
 
                     <div class="field">
@@ -1434,6 +1741,11 @@ export function renderProviderControlPlaneApp(
                   </div>
 
                   <div class="field-grid">
+                    <div class="field">
+                      <label for="authStrategy">Auth strategy</label>
+                      <select id="authStrategy" name="authStrategy"></select>
+                    </div>
+
                     <div class="field">
                       <label for="baseUrl">Base URL</label>
                       <input id="baseUrl" name="baseUrl" placeholder="https://api.openai.com/v1" />
@@ -1445,10 +1757,19 @@ export function renderProviderControlPlaneApp(
                     </div>
                   </div>
 
+                  <div class="field-wide">
+                    <div id="provider-capability" class="capability-panel"></div>
+                  </div>
+
+                  <div class="field-wide">
+                    <div id="provider-auth-guidance" class="auth-panel"></div>
+                  </div>
+
                   <div class="field-grid">
                     <div class="field">
-                      <label for="apiKey">API key</label>
+                      <label for="apiKey">API key / bearer token</label>
                       <input id="apiKey" name="apiKey" type="password" placeholder="Stored only if re-entered" />
+                      <div class="field-hint">Only used when the selected auth strategy requires a bearer credential.</div>
                     </div>
 
                     <div class="field">
@@ -1460,6 +1781,7 @@ export function renderProviderControlPlaneApp(
                   <div class="field-wide">
                     <label for="accessClientSecret">Access client secret</label>
                     <input id="accessClientSecret" name="accessClientSecret" type="password" placeholder="Optional for Access-protected local routes" />
+                    <div class="field-hint">These headers are separate from the provider auth strategy and only exist to traverse Cloudflare Access when required.</div>
                   </div>
 
                   <div class="field-wide">
@@ -1473,21 +1795,18 @@ export function renderProviderControlPlaneApp(
                         <input id="usesAiGateway" name="usesAiGateway" type="checkbox" />
                         Route through AI Gateway
                       </label>
-                      <label class="checkbox">
-                        <input id="oauthConnected" name="oauthConnected" type="checkbox" />
-                        OAuth already connected
-                      </label>
                     </div>
                   </div>
 
                   <div class="modal-footer">
                     <span class="muted">
                       Secrets remain encrypted at rest. Leave secret fields blank
-                      when you only want to update metadata or routing flags.
+                      when you only want to update metadata or route settings.
                     </span>
                     <div class="button-group">
                       <button id="reset-provider" class="button secondary" type="button">New provider</button>
                       <button id="delete-provider" class="button danger" type="button">Delete</button>
+                      <button id="clear-provider-secret" class="button secondary" type="button">Clear stored secrets</button>
                       <button id="test-provider" class="button secondary" type="button">Run test</button>
                       <button class="button primary" type="submit">Save provider</button>
                     </div>
@@ -1503,16 +1822,16 @@ export function renderProviderControlPlaneApp(
               <h3 style="font-size: 24px; margin-bottom: 8px">The next wizard layer already has a home.</h3>
               <div class="mini-log">
                 <div class="mini-log-line">
-                  <strong>Hosted providers first</strong>
-                  <span>API key and optional OAuth routes belong in the same provider control plane so users do not have to learn two separate setup systems.</span>
+                  <strong>No fake universal OAuth</strong>
+                  <span>EdgeIntel now exposes the auth path each provider actually expects instead of implying that every model route supports delegated OAuth.</span>
                 </div>
                 <div class="mini-log-line">
-                  <strong>Tunnel orchestration next</strong>
-                  <span>Local-model onboarding will reuse these records, then attach hostname, Access posture, connector state, and health history.</span>
+                  <strong>Secret posture stays visible</strong>
+                  <span>Primary provider auth and Access traversal are shown separately so operators can understand which secret solves which problem.</span>
                 </div>
                 <div class="mini-log-line">
                   <strong>Diagnostics stay visible</strong>
-                  <span>Tests should explain transport, target URL, auth posture, and failure mode instead of dumping raw log noise into the app.</span>
+                  <span>Tests now explain transport, target URL, auth strategy, and failure mode instead of dumping generic “connected” language into the app.</span>
                 </div>
               </div>
             </article>

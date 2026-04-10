@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Env } from "../src/env";
 import {
   buildOpenAiCompatibleModelsUrl,
+  buildProviderSecretHealth,
+  listProviderCapabilityCatalog,
   normalizeProviderSettingsInput,
   serializeProviderSetting,
   testProviderConnection,
@@ -15,6 +17,7 @@ const provider: PersistedProviderSetting = {
   displayName: "Ollama tunnel route",
   baseUrl: "https://ollama.example.com",
   defaultModel: "gemma3:27b",
+  authStrategy: "api-key",
   usesAiGateway: false,
   oauthConnected: false,
   status: "ready",
@@ -47,6 +50,7 @@ describe("provider settings helpers", () => {
 
     expect(normalized.baseUrl).toBe("https://api.openai.com/v1");
     expect(normalized.providerCode).toBe("openai");
+    expect(normalized.authStrategy).toBe("api-key");
     expect(normalized.secret?.apiKey).toBe("test-key");
   });
 
@@ -54,6 +58,11 @@ describe("provider settings helpers", () => {
     expect(buildOpenAiCompatibleModelsUrl("https://api.openai.com/v1")).toBe(
       "https://api.openai.com/v1/models",
     );
+    expect(
+      buildOpenAiCompatibleModelsUrl(
+        "https://generativelanguage.googleapis.com/v1beta/openai",
+      ),
+    ).toBe("https://generativelanguage.googleapis.com/v1beta/openai/models");
     expect(buildOpenAiCompatibleModelsUrl("https://ollama.example.com")).toBe(
       "https://ollama.example.com/v1/models",
     );
@@ -77,7 +86,38 @@ describe("provider settings helpers", () => {
 
     expect(view.secretConfigured).toBe(true);
     expect("secretEnvelopeJson" in view).toBe(false);
+    expect(view.authStrategy).toBe("api-key");
+    expect(view.capability.title).toBe("Ollama");
+    expect(view.secretHealth.canRunConnectionTest).toBe(false);
     expect(view.lastTestResult?.status).toBe("passed");
+  });
+
+  it("builds capability catalog entries for the supported provider presets", () => {
+    const catalog = listProviderCapabilityCatalog();
+    expect(catalog.find((entry) => entry.providerCode === "openai")?.title).toBe(
+      "OpenAI",
+    );
+    expect(
+      catalog.find((entry) => entry.providerCode === "workers-ai")?.authOptions[0]
+        ?.strategy,
+    ).toBe("workers-binding");
+  });
+
+  it("surfaces missing secret posture and access posture separately", () => {
+    const health = buildProviderSecretHealth(
+      {
+        ...provider,
+        authStrategy: "none",
+        metadataJson: JSON.stringify({ accessProtected: true }),
+      },
+      {
+        accessClientId: "access-id",
+      },
+    );
+
+    expect(health.requiresAccessHeaders).toBe(true);
+    expect(health.accessHeadersConfigured).toBe(false);
+    expect(health.summary).toContain("Access headers");
   });
 
   it("tests an OpenAI-compatible provider with auth and Access headers", async () => {
@@ -131,6 +171,7 @@ describe("provider settings helpers", () => {
         kind: "hosted-api-key",
         providerCode: "workers-ai",
         baseUrl: null,
+        authStrategy: "workers-binding",
       },
       null,
       {},

@@ -79,6 +79,7 @@ import {
   getInferenceCapabilities,
 } from "./lib/inference";
 import {
+  listProviderCapabilityCatalog,
   normalizeProviderSettingsInput,
   serializeProviderSetting,
   testProviderConnection,
@@ -118,6 +119,7 @@ import type {
   ExportFormat,
   HostnameValidationRequestBody,
   OperatorSession,
+  PersistedProviderSetting,
   PairingCreateRequestBody,
   PairingExchangeRequestBody,
   ProviderSettingsRequestBody,
@@ -210,6 +212,10 @@ function isOperatorControlPlaneRoute(request: Request, path: string): boolean {
   }
 
   if (path === "/api/settings/providers" || path.startsWith("/api/settings/providers/")) {
+    return true;
+  }
+
+  if (path === "/api/settings/provider-catalog") {
     return true;
   }
 
@@ -521,6 +527,7 @@ function handleProviderControlPlaneApp(): Response {
   return new Response(
     renderProviderControlPlaneApp({
       providersEndpoint: "/api/settings/providers",
+      providerCatalogEndpoint: "/api/settings/provider-catalog",
     }),
     {
       headers: {
@@ -548,10 +555,33 @@ function handleTunnelControlPlaneApp(): Response {
   );
 }
 
+async function serializeProviderSettingForControlPlane(
+  env: Env,
+  provider: PersistedProviderSetting,
+) {
+  let secrets = null;
+  try {
+    secrets = await decryptProviderSecretPayload(env, provider.secretEnvelopeJson);
+  } catch {
+    secrets = null;
+  }
+  return serializeProviderSetting(provider, secrets);
+}
+
 async function handleListProviders(env: Env): Promise<Response> {
   const providers = await listProviderSettings(env);
   return jsonResponse({
-    providers: providers.map(serializeProviderSetting),
+    providers: await Promise.all(
+      providers.map((provider) =>
+        serializeProviderSettingForControlPlane(env, provider),
+      ),
+    ),
+  });
+}
+
+async function handleProviderCatalog(): Promise<Response> {
+  return jsonResponse({
+    catalog: listProviderCapabilityCatalog(),
   });
 }
 
@@ -560,7 +590,7 @@ async function handleGetProvider(env: Env, providerId: string): Promise<Response
   if (!provider) return notFound("Provider setting not found.");
 
   return jsonResponse({
-    provider: serializeProviderSetting(provider),
+    provider: await serializeProviderSettingForControlPlane(env, provider),
   });
 }
 
@@ -586,6 +616,7 @@ async function handleCreateProvider(
       displayName: normalized.displayName,
       baseUrl: normalized.baseUrl,
       defaultModel: normalized.defaultModel,
+      authStrategy: normalized.authStrategy,
       usesAiGateway: normalized.usesAiGateway,
       oauthConnected: normalized.oauthConnected,
       status: normalized.status,
@@ -598,7 +629,10 @@ async function handleCreateProvider(
       return jsonResponse({ error: "Provider was created but could not be loaded." }, { status: 500 });
     }
 
-    return jsonResponse({ provider: serializeProviderSetting(created) }, { status: 201 });
+    return jsonResponse(
+      { provider: await serializeProviderSettingForControlPlane(env, created) },
+      { status: 201 },
+    );
   } catch (error) {
     return badRequest(
       error instanceof Error ? error.message : "Invalid provider payload.",
@@ -630,6 +664,7 @@ async function handleUpdateProvider(
         baseUrl: body.baseUrl === undefined ? existing.baseUrl : body.baseUrl,
         defaultModel:
           body.defaultModel === undefined ? existing.defaultModel : body.defaultModel,
+        authStrategy: body.authStrategy ?? existing.authStrategy,
         usesAiGateway: body.usesAiGateway ?? existing.usesAiGateway,
         oauthConnected: body.oauthConnected ?? existing.oauthConnected,
         status: body.status ?? existing.status,
@@ -638,7 +673,7 @@ async function handleUpdateProvider(
           safeJsonParse(existing.metadataJson, {}),
         secret: body.secret ?? undefined,
       },
-      { partial: true },
+      { partial: true, existing },
     );
 
     const secretEnvelopeJson =
@@ -654,6 +689,7 @@ async function handleUpdateProvider(
       displayName: merged.displayName,
       baseUrl: merged.baseUrl,
       defaultModel: merged.defaultModel,
+      authStrategy: merged.authStrategy,
       usesAiGateway: merged.usesAiGateway,
       oauthConnected: merged.oauthConnected,
       status: merged.status,
@@ -666,12 +702,46 @@ async function handleUpdateProvider(
       return jsonResponse({ error: "Provider was updated but could not be loaded." }, { status: 500 });
     }
 
-    return jsonResponse({ provider: serializeProviderSetting(updated) });
+    return jsonResponse({
+      provider: await serializeProviderSettingForControlPlane(env, updated),
+    });
   } catch (error) {
     return badRequest(
       error instanceof Error ? error.message : "Invalid provider payload.",
     );
   }
+}
+
+async function handleClearProviderSecret(
+  env: Env,
+  providerId: string,
+): Promise<Response> {
+  const existing = await getProviderSetting(env, providerId);
+  if (!existing) return notFound("Provider setting not found.");
+
+  await updateProviderSetting(env, providerId, {
+    kind: existing.kind,
+    providerCode: existing.providerCode,
+    displayName: existing.displayName,
+    baseUrl: existing.baseUrl,
+    defaultModel: existing.defaultModel,
+    authStrategy: existing.authStrategy,
+    usesAiGateway: existing.usesAiGateway,
+    oauthConnected: existing.authStrategy === "oauth",
+    status: existing.status,
+    secretEnvelopeJson: null,
+    metadataJson: existing.metadataJson,
+  });
+
+  const refreshed = await getProviderSetting(env, providerId);
+  if (!refreshed) {
+    return jsonResponse({ error: "Provider secret was cleared but the record could not be reloaded." }, { status: 500 });
+  }
+
+  return jsonResponse({
+    cleared: true,
+    provider: await serializeProviderSettingForControlPlane(env, refreshed),
+  });
 }
 
 async function handleDeleteProvider(
@@ -709,7 +779,9 @@ async function handleTestProvider(
     const refreshed = await getProviderSetting(env, providerId);
 
     return jsonResponse({
-      provider: refreshed ? serializeProviderSetting(refreshed) : serializeProviderSetting(provider),
+      provider: refreshed
+        ? await serializeProviderSettingForControlPlane(env, refreshed)
+        : await serializeProviderSettingForControlPlane(env, provider),
       testResult: result,
     });
   } catch (error) {
@@ -734,7 +806,8 @@ async function handleTestProvider(
 
     return jsonResponse(
       {
-        provider: serializeProviderSetting(
+        provider: await serializeProviderSettingForControlPlane(
+          env,
           (await getProviderSetting(env, providerId)) ?? provider,
         ),
         testResult: failure,
@@ -1915,6 +1988,10 @@ export default class EdgeIntelWorker extends WorkerEntrypoint<Env> {
       return handleListProviders(this.env);
     }
 
+    if (request.method === "GET" && path === "/api/settings/provider-catalog") {
+      return handleProviderCatalog();
+    }
+
     if (request.method === "POST" && path === "/api/settings/providers") {
       return handleCreateProvider(request, this.env);
     }
@@ -1928,6 +2005,13 @@ export default class EdgeIntelWorker extends WorkerEntrypoint<Env> {
       /^\/api\/settings\/providers\/[^/]+$/.test(path)
     ) {
       return handleUpdateProvider(request, this.env, path.split("/")[4]);
+    }
+
+    if (
+      request.method === "DELETE" &&
+      /^\/api\/settings\/providers\/[^/]+\/secret$/.test(path)
+    ) {
+      return handleClearProviderSecret(this.env, path.split("/")[4]);
     }
 
     if (

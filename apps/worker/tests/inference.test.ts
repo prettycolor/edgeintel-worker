@@ -98,6 +98,11 @@ describe("inference helpers", () => {
     expect(buildOpenAiCompatibleChatUrl("https://gateway.example.com/v1/acct/gw/openai")).toBe(
       "https://gateway.example.com/v1/acct/gw/openai/chat/completions",
     );
+    expect(
+      buildOpenAiCompatibleChatUrl(
+        "https://generativelanguage.googleapis.com/v1beta/openai",
+      ),
+    ).toBe("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions");
     expect(buildOpenAiCompatibleChatUrl("https://ollama.example.com")).toBe(
       "https://ollama.example.com/v1/chat/completions",
     );

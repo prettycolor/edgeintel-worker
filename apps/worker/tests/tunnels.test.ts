@@ -42,6 +42,7 @@ const localProvider: PersistedProviderSetting = {
   displayName: "Local Ollama",
   baseUrl: "https://llm.example.com",
   defaultModel: "gemma3:27b",
+  authStrategy: "none",
   usesAiGateway: false,
   oauthConnected: false,
   status: "ready",
