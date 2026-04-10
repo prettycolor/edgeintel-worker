@@ -1,3 +1,4 @@
+import type { OAuthHelpers } from "@cloudflare/workers-oauth-provider";
 import type { JobCoordinator } from "./durable-objects/job-coordinator";
 import type { EdgeIntelScanWorkflow } from "./workflows/scan-workflow";
 import type { ArtifactQueueMessage, ScanQueueMessage, ScanWorkflowParams } from "./types";
@@ -20,12 +21,14 @@ export type Env = Omit<
   | "AI_GATEWAY_PROVIDER"
   | "AI_INFERENCE_DEFAULT_ROUTE"
   | "BROWSER_RENDERING_REST_BASE_URL"
+  | "OAUTH_KV"
 > & {
   AI: Ai;
   SCAN_QUEUE: Queue<ScanQueueMessage>;
   ARTIFACT_QUEUE: Queue<ArtifactQueueMessage>;
   SCAN_WORKFLOW: Workflow<ScanWorkflowParams>;
   JOB_COORDINATOR: DurableObjectNamespace<JobCoordinator>;
+  OAUTH_KV: KVNamespace;
   SCAN_BATCH_LIMIT: string;
   SCAN_QUEUE_NAME: string;
   ARTIFACT_QUEUE_NAME: string;
@@ -53,6 +56,12 @@ export type Env = Omit<
   LOCAL_MODEL_ACCESS_CLIENT_ID?: string;
   LOCAL_MODEL_ACCESS_CLIENT_SECRET?: string;
   LOCAL_MODEL_AI_GATEWAY_PROVIDER?: string;
+  MCP_ACCESS_CLIENT_ID?: string;
+  MCP_ACCESS_CLIENT_SECRET?: string;
+  MCP_ACCESS_TOKEN_URL?: string;
+  MCP_ACCESS_AUTHORIZATION_URL?: string;
+  MCP_ACCESS_JWKS_URL?: string;
+  OAUTH_PROVIDER?: OAuthHelpers;
 };
 
 export type WorkflowClass = typeof EdgeIntelScanWorkflow;

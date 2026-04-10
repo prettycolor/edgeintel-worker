@@ -59,5 +59,5 @@ Minimum sign-off:
 - public GitHub packages
 - notarized macOS distribution
 - release tags and GitHub Releases
-- MCP server implementation
+- deployed MCP smoke sign-off and Inspector verification
 - full cybersecurity audit sign-off

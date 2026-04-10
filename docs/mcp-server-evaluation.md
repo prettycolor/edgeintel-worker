@@ -6,20 +6,20 @@ Should EdgeIntel expose its own MCP server?
 
 ## Short Answer
 
-Yes, and the research/design gate is now complete.
+Yes, and the research/design gate is complete and implemented.
 
 An EdgeIntel MCP server would be a strong addition because it would let Claude,
 Codex, ChatGPT-compatible MCP clients, and internal SE copilots invoke EdgeIntel
 as a real tool surface instead of only using the HTTP API or app shell.
 
-Phase 16 is closed, and Phase 17 has now completed the design work needed to
-move forward.
+Phase 16 is closed, Phase 17 completed the design work, and Phase 18 has now
+landed the bounded authenticated MCP server.
 
 The current conclusion is:
 
 - do **not** mirror the existing HTTP API directly into MCP
 - do build a **dedicated authenticated remote MCP surface**
-- implement it as the next phase using Cloudflare’s Worker-native MCP stack
+- keep the first live release bounded to Tier 1 tools and scope-gated exposure
 
 The decision-complete design artifacts are:
 
@@ -147,10 +147,9 @@ next expansion, provided it follows the Phase 17 design artifacts.
 
 ## Recommended Future Phase
 
-- **Phase 18: Authenticated EdgeIntel MCP implementation**
-  - remote MCP endpoint on Workers
-  - Access-backed OAuth flow
-  - read-oriented and bounded tools first
-  - MCP Inspector verification
-  - Claude/Codex/Cursor connection guide
+- **Post-Phase 18 MCP hardening**
+  - deployed MCP Inspector verification
+  - live Claude/Codex/Cursor host walkthroughs
+  - OAuth abuse and rate-limit hardening
+  - observability for MCP token and tool pressure
   - mutation tools only after the initial MCP release is stable

@@ -33,6 +33,14 @@ Cloudflare-native domain posture and remediation engine for the `hostingtool.dev
 - `GET /api/session`, `POST /api/pairings`, and
   `POST /api/pairings/:id/exchange` for Access-authenticated operator session
   inspection plus one-time connector bootstrap exchange
+- authenticated remote MCP endpoints at:
+  - `POST /mcp`
+  - `GET|POST /authorize`
+  - `GET /callback`
+  - `POST /token`
+  - `POST /register`
+  - `GET /.well-known/oauth-authorization-server`
+  - `GET /.well-known/oauth-protected-resource/mcp`
 - `GET /app` and `GET /app/providers` for the current Worker-served provider control-plane UI
 - `GET /app/tunnels` for the current Worker-served tunnel and local-model wizard workspace
 - `POST /api/scans/:scanRunId/ai-brief` to generate an evidence-bounded AI
@@ -164,6 +172,8 @@ marketing website.
 - The MCP decision and rollout are documented in
   [docs/phase-17-edgeintel-mcp-plan.md](./docs/phase-17-edgeintel-mcp-plan.md)
   and [docs/edgeintel-mcp-tool-matrix.md](./docs/edgeintel-mcp-tool-matrix.md).
+- The live Phase 18 connection path is in
+  [docs/mcp-connection-guide.md](./docs/mcp-connection-guide.md).
 
 That means the project is Cloudflare-native, but it is not automatically an
 embedded panel inside Cloudflare's own dashboard product.
@@ -273,6 +283,14 @@ Release-layer docs now add:
 - maintenance and security roadmap in
   [docs/maintenance-and-security-roadmap.md](./docs/maintenance-and-security-roadmap.md)
 
+Phase 18 now adds:
+
+- a bounded authenticated MCP server on `/mcp`
+- OAuth-protected MCP metadata and token endpoints
+- Cloudflare Access for SaaS-backed authorization for MCP clients
+- Tier 1 tool registration with scope-gated exposure
+- MCP routing, tool-registration, and redaction coverage in the Worker test suite
+
 ## Current Scope
 
 This is the phase-0/1 implementation slice:
@@ -316,6 +334,7 @@ Release/operator docs now live in:
 - [docs/operator-quickstart.md](./docs/operator-quickstart.md)
 - [docs/release-checklist.md](./docs/release-checklist.md)
 - [docs/mcp-server-evaluation.md](./docs/mcp-server-evaluation.md)
+- [docs/mcp-connection-guide.md](./docs/mcp-connection-guide.md)
 - [docs/maintenance-and-security-roadmap.md](./docs/maintenance-and-security-roadmap.md)
 - [docs/phase-16-security-plan.md](./docs/phase-16-security-plan.md)
 - [docs/edgeintel-worker-threat-model.md](./docs/edgeintel-worker-threat-model.md)

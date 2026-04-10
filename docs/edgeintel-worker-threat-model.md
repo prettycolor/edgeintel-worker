@@ -177,18 +177,20 @@ Out of scope:
 - **Residual risk:** desktop notarization/signing and hardened release
   distribution are not complete in this repo yet.
 
-### T7. Future MCP surface becoming an oversized remote-admin interface
+### T7. MCP surface becoming an oversized remote-admin interface
 
 - **Assets impacted:** Cloudflare account resources, secrets, scans, customer
   data, local routes
 - **Likelihood:** high if implemented loosely
 - **Impact:** critical
 - **Priority:** critical
-- **Current mitigation:** no MCP server is implemented yet, and the approved
-  Phase 17 plan keeps the first MCP surface bounded to authenticated,
-  scope-checked tools with secret-bearing routes excluded.
-- **Residual risk:** the implementation phase still needs a dedicated MCP
-  negative test suite and release gate before the server can ship.
+- **Current mitigation:** the Phase 18 MCP server is implemented as an
+  authenticated, scope-gated, bounded tool layer on `/mcp`, with pairings,
+  heartbeat, provider secrets, and tunnel mutation excluded from the exposed
+  tool set.
+- **Residual risk:** the current coverage is strong at the unit and route level,
+  but deployed end-to-end adversarial validation for the OAuth flow, scope
+  downscoping, and abuse-rate behavior is still a remaining hardening task.
 
 ## Existing Mitigations Present In Code
 
@@ -219,14 +221,13 @@ Out of scope:
 
 ## Exit Decision For MCP
 
-**Decision:** approve MCP for the next implementation phase.
+**Decision:** MCP implementation is approved and landed for the current bounded
+scope.
 
 Reason:
 
-- EdgeIntel is now in a safer position for HTTP/app-shell/operator usage, and
-  the dedicated Phase 17 plan now defines the tool scoping, auth model, and
-  non-negotiable exclusions needed to build MCP correctly.
-- The next move is a bounded implementation phase, not generic additional
-  evaluation.
-- The MCP release gate still requires tool-specific authorization tests and a
-  dedicated negative suite before shipping.
+- EdgeIntel now has the bounded MCP surface defined by the Phase 17 plan.
+- The remaining MCP work is no longer “should we build it?” but “how do we
+  harden and operationalize the deployed surface?”
+- The next security work is adversarial and deployed validation, not design
+  approval.

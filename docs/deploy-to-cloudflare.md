@@ -28,6 +28,7 @@ For the full operator path, also prepare:
 - a Zero Trust organization
 - a custom hostname you control for the EdgeIntel app
 - a Cloudflare API token for in-app tunnel, DNS, and Access orchestration
+- a Cloudflare Access for SaaS OIDC application for the MCP surface
 
 ## 1. Verify Wrangler Auth
 
@@ -69,6 +70,13 @@ This creates the database and writes the remote `database_id` into
 
 ```bash
 npx wrangler r2 bucket create edgeintel-artifacts --binding EDGE_ARTIFACTS --update-config
+```
+
+### KV For MCP OAuth State
+
+```bash
+npx wrangler kv namespace create edgeintel-oauth --binding OAUTH_KV --update-config
+npx wrangler kv namespace create edgeintel-oauth-preview --binding OAUTH_KV --preview --update-config
 ```
 
 ### Queues
@@ -113,6 +121,16 @@ npx wrangler secret put ACCESS_TEAM_DOMAIN
 npx wrangler secret put ACCESS_AUD
 ```
 
+### MCP deploy secrets
+
+```bash
+npx wrangler secret put MCP_ACCESS_CLIENT_ID
+npx wrangler secret put MCP_ACCESS_CLIENT_SECRET
+npx wrangler secret put MCP_ACCESS_TOKEN_URL
+npx wrangler secret put MCP_ACCESS_AUTHORIZATION_URL
+npx wrangler secret put MCP_ACCESS_JWKS_URL
+```
+
 For local-model routing or BYOK inference, also set the relevant optional
 provider secrets from
 [`apps/worker/.dev.vars.example`](/Users/b.rad/Documents/GitHub/edgeintel-worker/apps/worker/.dev.vars.example).
@@ -149,6 +167,11 @@ After deploy, confirm these work on your `workers.dev` or custom domain:
 
 If your deployment is only for the scan/commercial demo path, this is enough.
 
+If you are also demoing MCP, verify:
+
+- `GET /.well-known/oauth-authorization-server`
+- `GET /.well-known/oauth-protected-resource/mcp`
+
 ## 8. Full Operator App Setup
 
 To use `/app/providers` and `/app/tunnels` remotely, protect the app with
@@ -164,6 +187,18 @@ Cloudflare Access.
    secret-bearing APIs now include `Cf-Access-Jwt-Assertion`.
 
 Without this, the control-plane app routes will reject remote use.
+
+## 8.5 MCP Access Setup
+
+The EdgeIntel MCP server uses a separate OAuth path from the app-shell Access
+JWT gate.
+
+Use Cloudflare Access for SaaS as the upstream OIDC provider for MCP, then wire
+its client credentials and endpoint URLs into the `MCP_ACCESS_*` Worker
+secrets.
+
+The full setup flow is in
+[`docs/mcp-connection-guide.md`](/Users/b.rad/Documents/GitHub/edgeintel-worker/docs/mcp-connection-guide.md).
 
 ## 9. Full Operator API Token Guidance
 

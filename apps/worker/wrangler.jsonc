@@ -3,7 +3,7 @@
   "name": "edgeintel-worker",
   "main": "src/index.ts",
   "compatibility_date": "2026-04-09",
-  "compatibility_flags": ["nodejs_compat"],
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
   "observability": {
     "enabled": true,
     "head_sampling_rate": 1
@@ -41,6 +41,13 @@
     {
       "binding": "EDGE_ARTIFACTS",
       "bucket_name": "edgeintel-artifacts"
+    }
+  ],
+  "kv_namespaces": [
+    {
+      "binding": "OAUTH_KV",
+      "id": "00000000000000000000000000000000",
+      "preview_id": "00000000000000000000000000000000"
     }
   ],
   "queues": {

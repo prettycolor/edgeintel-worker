@@ -37,17 +37,17 @@
 - **Recommended next step:** add stronger UI guardrails that warn on
   non-Access-protected public hostnames for local-model providers.
 
-## R5. MCP implementation still carries high blast radius if the Phase 17 plan is ignored
+## R5. MCP is now implemented, but deployed OAuth and abuse hardening still need a deeper pass
 
 - **Impact:** critical
-- **Likelihood:** high if rushed
-- **Why it remains:** EdgeIntel’s current capability set includes reads,
-  exports, commercial outputs, tunnel orchestration, and credential-bearing
-  control-plane flows. Turning that into an MCP surface without explicit tool
-  scoping and confirmation would be dangerous.
-- **Recommended next step:** implement MCP only through the approved
-  Phase 17 plan, keep secret-bearing surfaces out of scope, and add the
-  dedicated MCP negative test suite during implementation.
+- **Likelihood:** medium
+- **Why it remains:** the current MCP surface is correctly bounded, but it now
+  exists as a live remote interface with OAuth, dynamic registration, and
+  scope-bearing tokens. That raises the bar for deployed negative testing and
+  observability.
+- **Recommended next step:** run a deployed MCP hardening pass against
+  authorize/token/register flows, add abuse-rate instrumentation, and add a
+  live Inspector-based acceptance harness to the release checklist.
 
 ## R6. Desktop packaging dependencies still need deeper triage
 

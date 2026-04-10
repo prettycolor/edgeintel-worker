@@ -1,4 +1,5 @@
 import { WorkerEntrypoint } from "cloudflare:workers";
+import type { OAuthProviderOptions } from "@cloudflare/workers-oauth-provider";
 import type { Env } from "./env";
 import { JobCoordinator } from "./durable-objects/job-coordinator";
 import {
@@ -119,6 +120,8 @@ import {
   encryptTunnelSecretPayload,
 } from "./lib/secrets";
 import { requireOperatorSession } from "./lib/auth";
+import { handleMcpAccessRequest } from "./mcp/access-handler";
+import { SUPPORTED_MCP_SCOPES } from "./mcp/scopes";
 import type {
   AiBriefRequestBody,
   ArtifactQueueMessage,
@@ -207,6 +210,22 @@ async function streamJobEvents(env: Env, jobId: string, cursor = 0): Promise<Res
 
 function isOperatorControlPlaneRoute(request: Request, path: string): boolean {
   return routeRequiresOperatorSession(request, path);
+}
+
+function isMcpProviderRoute(path: string): boolean {
+  if (path === "/mcp" || path.startsWith("/mcp/")) {
+    return true;
+  }
+
+  return (
+    path === "/authorize" ||
+    path === "/callback" ||
+    path === "/token" ||
+    path === "/register" ||
+    path === "/.well-known/oauth-authorization-server" ||
+    path === "/.well-known/oauth-protected-resource" ||
+    path.startsWith("/.well-known/oauth-protected-resource/")
+  );
 }
 
 function buildPairingMetadata(
@@ -1925,7 +1944,7 @@ async function processArtifactMessage(
 
 export { JobCoordinator, EdgeIntelScanWorkflow };
 
-export default class EdgeIntelWorker extends WorkerEntrypoint<Env> {
+export class EdgeIntelAppHandler extends WorkerEntrypoint<Env> {
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
     const path = url.pathname;
@@ -1937,6 +1956,13 @@ export default class EdgeIntelWorker extends WorkerEntrypoint<Env> {
         worker: "edgeintel-worker",
         timestamp: new Date().toISOString(),
       });
+    }
+
+    if (path === "/authorize" || path === "/callback") {
+      return handleMcpAccessRequest(
+        request,
+        this.env as Env & { OAUTH_PROVIDER: NonNullable<Env["OAUTH_PROVIDER"]> },
+      );
     }
 
     if (isOperatorControlPlaneRoute(request, path)) {
@@ -2189,5 +2215,53 @@ export default class EdgeIntelWorker extends WorkerEntrypoint<Env> {
       await createScanJob(this.env, [watch.domain], [watch.domain]);
       await markDomainWatchEnqueued(this.env, watch.domain, watch.intervalHours);
     }
+  }
+}
+
+const EDGEINTEL_MCP_PROVIDER_OPTIONS = {
+  apiRoute: "/mcp",
+  apiHandler: {
+    async fetch(request: Request, env: Env, ctx: ExecutionContext) {
+      const { handleMcpApiRequest } = await import("./mcp/api-handler");
+      return handleMcpApiRequest(request, env, ctx);
+    },
+  },
+  authorizeEndpoint: "/authorize",
+  tokenEndpoint: "/token",
+  clientRegistrationEndpoint: "/register",
+  defaultHandler: EdgeIntelAppHandler,
+  scopesSupported: [...SUPPORTED_MCP_SCOPES],
+  allowPlainPKCE: false,
+  resourceMetadata: {
+    resource_name: "EdgeIntel MCP",
+    scopes_supported: [...SUPPORTED_MCP_SCOPES],
+  },
+} satisfies OAuthProviderOptions<Env>;
+
+let edgeIntelMcpProviderPromise: Promise<{
+  fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response>;
+}> | null = null;
+
+async function getEdgeIntelMcpProvider() {
+  if (!edgeIntelMcpProviderPromise) {
+    edgeIntelMcpProviderPromise = import("@cloudflare/workers-oauth-provider").then(
+      ({ default: OAuthProvider }) =>
+        new OAuthProvider<Env>(EDGEINTEL_MCP_PROVIDER_OPTIONS),
+    );
+  }
+
+  return edgeIntelMcpProviderPromise;
+}
+
+export default class EdgeIntelWorker extends EdgeIntelAppHandler {
+  override async fetch(request: Request): Promise<Response> {
+    const path = new URL(request.url).pathname;
+
+    if (isMcpProviderRoute(path)) {
+      const provider = await getEdgeIntelMcpProvider();
+      return provider.fetch(request, this.env, this.ctx);
+    }
+
+    return super.fetch(request);
   }
 }

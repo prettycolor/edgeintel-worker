@@ -15,6 +15,10 @@
 | Tunnel input | `localServiceUrl` rejects embedded credentials | `apps/worker/tests/tunnels.test.ts` |
 | Connector payloads | Invalid connector status and malformed heartbeat booleans are rejected | `apps/worker/tests/connector-input.test.ts` |
 | Connector payloads | Pairing metadata is normalized and bounded | `apps/worker/tests/connector-input.test.ts` |
+| MCP routing | `/mcp` is handled by the OAuth provider and ordinary app routes stay on the existing control-plane path | `apps/worker/tests/mcp-routing.test.ts` |
+| MCP scopes | Unsupported scopes are filtered and defaults are deterministic | `apps/worker/tests/mcp-scopes.test.ts` |
+| MCP tool exposure | Registered tools match the granted scope bundle | `apps/worker/tests/mcp-server.test.ts` |
+| MCP tunnel diagnostics | Tunnel observability is redacted before becoming MCP output | `apps/worker/tests/mcp-operations.test.ts` |
 | Secret storage | AES-GCM encrypt/decrypt round trip works and empty payloads stay empty | `apps/worker/tests/secrets.test.ts` |
 | Cloudflared install | Expected asset name and release-note checksum parsing are correct | `apps/desktop-connector/src/main/cloudflared.test.ts` |
 
@@ -43,4 +47,5 @@ These are not fully automated yet and should remain in the release checklist:
 - no dedicated load or brute-force test around pairing exchange yet
 - no automated macOS Keychain tamper test
 - no dedicated D1-backed replay-race integration harness yet
-- no MCP-specific adversarial suite because MCP is still deferred
+- no deployed end-to-end OAuth and Inspector harness yet for the MCP server
+- no rate-limit or abuse-volume suite yet for token, register, or authorize pressure

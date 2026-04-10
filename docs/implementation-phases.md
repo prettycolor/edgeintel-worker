@@ -75,6 +75,13 @@ The goal of the next buildout is not to re-architect from scratch. It is to hard
   - CI plus Dependabot for baseline repo upkeep
 - There are no known missing core implementation items from the current product
   roadmap that need to land before the security phase.
+- Phase 18 authenticated MCP implementation is now complete:
+  - `/mcp` now serves a bounded authenticated remote MCP surface
+  - `/authorize`, `/callback`, `/token`, and `/register` now back the MCP OAuth flow
+  - `/.well-known/oauth-authorization-server` and
+    `/.well-known/oauth-protected-resource/mcp` now advertise the MCP auth surface
+  - Tier 1 tools are scope-gated instead of mirroring the existing `/api/*` surface
+  - MCP scope, routing, registration, and redaction tests now gate the Worker package
 - Remaining non-security work is now release-finalization work:
   - final visual QA and polish
   - notarized macOS distribution
@@ -115,7 +122,18 @@ Phase 17 is now complete in the current repo state.
 - MCP tool matrix:
   [edgeintel-mcp-tool-matrix.md](./edgeintel-mcp-tool-matrix.md)
 
-The next phase is **Phase 18: Authenticated EdgeIntel MCP implementation**.
+Phase 18 is now complete in the current repo state.
+
+- MCP operator guide:
+  [mcp-connection-guide.md](./mcp-connection-guide.md)
+
+The next work is post-implementation release and hardening work:
+
+- deployed MCP smoke testing on the real Cloudflare account
+- final visual QA and polish
+- desktop packaging / notarization finish work
+- Electron packaging-chain vulnerability remediation
+- public release packaging at the very end
 
 ## Phase 0: Foundation Lock-In
 
