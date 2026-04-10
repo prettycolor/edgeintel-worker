@@ -133,3 +133,6 @@ What is intentionally not here yet:
 ## Roadmap
 
 The implementation sequence is documented in [docs/implementation-phases.md](./docs/implementation-phases.md).
+
+For the next onboarding-focused expansion, see
+[docs/provider-and-tunnel-wizard-roadmap.md](./docs/provider-and-tunnel-wizard-roadmap.md).
