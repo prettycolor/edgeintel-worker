@@ -34,10 +34,12 @@ Minimum sign-off:
 
 - deploy to a signed-in Cloudflare account succeeds
 - remote D1 migrations are applied
-- scan endpoint works remotely
-- commercial brief endpoint works remotely
-- export creation works remotely
+- public `/health` smoke test works remotely
+- public MCP metadata endpoints work remotely
+- `/mcp` returns the expected OAuth challenge without a token
+- scan, commercial brief, and export endpoints work remotely behind Access
 - Access-protected app routes work on the chosen hostname
+- `/authorize` works only after the `MCP_ACCESS_*` secrets are configured
 
 ## Demo Readiness
 

@@ -2,6 +2,11 @@
 
 This is the fastest factual guide to using EdgeIntel in its current state.
 
+In deployed environments, `/app*` and `/api/*` are private-by-default. Remote
+operator use requires Cloudflare Access to be configured first. Without that,
+the public deployed hostname is only suitable for `/health`, MCP metadata, and
+basic auth-challenge smoke tests.
+
 ## What Is UI-Driven Today
 
 Current app surfaces:
@@ -18,7 +23,11 @@ Current scan and report flows are still primarily API-driven:
 - `POST /api/exports/:scanRunId`
 
 That means the provider and tunnel workflows are app-driven today, while the
-scan/report demo is best driven by API calls, curl, or a simple API client.
+scan/report demo is best driven by API calls, curl, or a simple API client once
+you are either:
+
+- on local development with the deliberate localhost bypass, or
+- behind Cloudflare Access on the deployed host
 
 ## 1. Configure A Model Provider
 
@@ -59,6 +68,8 @@ until the paired machine runs the connector and `cloudflared`.
 
 ## 4. Run A Scan
 
+### Local development path
+
 From the repo root during local development:
 
 ```bash
@@ -68,6 +79,13 @@ curl -X POST http://127.0.0.1:8787/api/scan \
 ```
 
 Capture the returned `jobId`.
+
+### Remote path
+
+For remote use, first finish the Access setup in
+[`docs/deploy-to-cloudflare.md`](/Users/b.rad/Documents/GitHub/edgeintel-worker/docs/deploy-to-cloudflare.md).
+Then call the same API surface through the Access-protected hostname with a
+valid `Cf-Access-Jwt-Assertion` header or an Access-backed browser session.
 
 ## 5. Follow Job Progress
 
@@ -139,3 +157,16 @@ Use this as a grounded explanation layer, not as the source-of-truth result.
 4. Read the commercial brief.
 5. Generate the export needed for the audience:
    technical, customer-facing, or Cloudflare-implementation-oriented.
+
+## Public Deployed Smoke Checklist
+
+If you only need to confirm the Cloudflare deployment itself before the full
+Access setup is ready, verify:
+
+- `/health` returns `200`
+- `/.well-known/oauth-authorization-server` returns `200`
+- `/.well-known/oauth-protected-resource/mcp` returns `200`
+- `/mcp` without a token returns `401`
+
+Do not treat that as full operator readiness. The actual app and API workflows
+remain Access-gated.

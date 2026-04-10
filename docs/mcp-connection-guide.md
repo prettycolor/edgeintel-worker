@@ -128,9 +128,15 @@ After deploy, verify these endpoints on your EdgeIntel hostname:
 
 Also verify that:
 
+- the well-known metadata endpoints can respond before the full OAuth flow is
+  wired
 - `GET /authorize` renders the approval page
 - `POST /mcp` without a token returns an OAuth challenge flow instead of the
   normal operator-session response
+
+If `GET /authorize` fails with a missing `MCP_ACCESS_*` configuration error,
+the Worker is deployed correctly but the upstream Access for SaaS OIDC values
+have not been configured yet.
 
 ## 5. Test With MCP Inspector
 

@@ -7,13 +7,18 @@ Cloudflare account.
 
 Use one of these modes:
 
-- **Minimal API deploy**
-  Good for scan, commercial brief, and export demos on `workers.dev`.
+- **Local development demo**
+  Good for scan, commercial brief, export, provider, and tunnel demos on
+  `localhost` with the deliberate local Access bypass.
+- **Public smoke deploy**
+  Good for proving the Worker, resources, health endpoint, and MCP metadata are
+  live on Cloudflare.
 - **Full operator deploy**
   Good for provider settings, tunnel orchestration, Access-protected app
   surfaces, and the desktop connector flow.
 
-The minimal path is faster. The full path is the real product story.
+The public-smoke path is the fastest Cloudflare deploy. The full operator path
+is the real product story.
 
 ## Prerequisites
 
@@ -65,6 +70,11 @@ npx wrangler d1 create edgeintel --binding EDGE_DB --update-config
 
 This creates the database and writes the remote `database_id` into
 [`wrangler.jsonc`](/Users/b.rad/Documents/GitHub/edgeintel-worker/apps/worker/wrangler.jsonc).
+
+After using `--update-config`, review
+[`wrangler.jsonc`](/Users/b.rad/Documents/GitHub/edgeintel-worker/apps/worker/wrangler.jsonc)
+before continuing. Repeated resource-creation commands can leave duplicated
+bindings behind if you rerun them against an already-initialized config.
 
 ### R2
 
@@ -121,6 +131,10 @@ npx wrangler secret put ACCESS_TEAM_DOMAIN
 npx wrangler secret put ACCESS_AUD
 ```
 
+Without `ACCESS_TEAM_DOMAIN` and `ACCESS_AUD`, deployed requests to `/app*` and
+`/api/*` will fail intentionally because EdgeIntel is private-by-default after
+Phase 16.
+
 ### MCP deploy secrets
 
 ```bash
@@ -130,6 +144,9 @@ npx wrangler secret put MCP_ACCESS_TOKEN_URL
 npx wrangler secret put MCP_ACCESS_AUTHORIZATION_URL
 npx wrangler secret put MCP_ACCESS_JWKS_URL
 ```
+
+Without these `MCP_ACCESS_*` secrets, the metadata endpoints can still respond,
+but `/authorize` cannot complete the OAuth flow.
 
 For local-model routing or BYOK inference, also set the relevant optional
 provider secrets from
@@ -156,21 +173,43 @@ npm run deploy
 This deploys the Worker, Durable Object, Workflow, and queue consumers to your
 authenticated Cloudflare account.
 
+The committed Worker config intentionally leaves `cpu_ms` unset so the default
+deploy path also works on Free plan accounts. If you add explicit CPU limits
+back into
+[`wrangler.jsonc`](/Users/b.rad/Documents/GitHub/edgeintel-worker/apps/worker/wrangler.jsonc),
+Cloudflare Free plans will reject the deploy.
+
 ## 7. Minimal Post-Deploy Smoke Test
 
-After deploy, confirm these work on your `workers.dev` or custom domain:
+After deploy, confirm these public endpoints work on your `workers.dev` or
+custom domain:
 
-- `POST /api/scan`
-- `GET /api/domains/:domain/latest`
-- `GET /api/scans/:scanRunId/commercial-brief`
-- `POST /api/exports/:scanRunId`
-
-If your deployment is only for the scan/commercial demo path, this is enough.
-
-If you are also demoing MCP, verify:
-
+- `GET /health`
 - `GET /.well-known/oauth-authorization-server`
 - `GET /.well-known/oauth-protected-resource/mcp`
+- `POST /mcp` without a token returns an OAuth challenge (`401`), not a generic
+  Worker failure
+
+This proves the Worker, MCP metadata, and public routing are alive.
+
+Then verify the protected operator path:
+
+- `GET /app`
+- `GET /api/session`
+- `POST /api/scan`
+- `GET /api/domains/:domain/latest`
+
+These routes only work after `ACCESS_TEAM_DOMAIN` and `ACCESS_AUD` are set and
+the request is coming through Cloudflare Access with a valid
+`Cf-Access-Jwt-Assertion` header.
+
+Then verify the MCP OAuth flow:
+
+- `GET /authorize`
+- `POST /token`
+- MCP Inspector against `https://<edgeintel-host>/mcp`
+
+These only work after the `MCP_ACCESS_*` secrets are set.
 
 ## 8. Full Operator App Setup
 
@@ -229,14 +268,16 @@ After the Worker is live and Access-protected:
 The detailed operator flow is in
 [`docs/operator-quickstart.md`](/Users/b.rad/Documents/GitHub/edgeintel-worker/docs/operator-quickstart.md).
 
-## Fastest Interview Deploy
+## Fastest Interview Demo Path
 
 If time is constrained, use this path:
 
-1. Minimal API deploy on `workers.dev`
-2. Run the scan/commercial brief/export demo
-3. Separately show the provider and tunnel control plane locally
-4. Explain the full Access-protected custom-domain setup as the production path
+1. Deploy the Worker to Cloudflare and verify `/health` plus the MCP metadata
+2. Run the full operator/scan/commercial/export demo locally on `localhost`
+3. Show the deployed `workers.dev` or custom-domain health/MCP endpoints as the
+   live Cloudflare proof point
+4. If Access is ready, switch to the full remote operator app demo on the
+   protected hostname
 
-That keeps the live demo tight without pretending the control plane is already a
-public multi-user product.
+That keeps the demo factual. It does not pretend the protected operator app is
+publicly usable before Access and MCP OAuth are actually configured.

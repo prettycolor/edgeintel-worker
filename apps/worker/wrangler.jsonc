@@ -4,6 +4,7 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-04-09",
   "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  // Keep cpu_ms unset so the default deploy path still works on Free plan accounts.
   "observability": {
     "enabled": true,
     "head_sampling_rate": 1
@@ -34,7 +35,8 @@
   "d1_databases": [
     {
       "binding": "EDGE_DB",
-      "database_name": "edgeintel"
+      "database_name": "edgeintel",
+      "database_id": "a6b341e3-f6c7-4723-9596-177e46c7d37c"
     }
   ],
   "r2_buckets": [
@@ -46,8 +48,8 @@
   "kv_namespaces": [
     {
       "binding": "OAUTH_KV",
-      "id": "00000000000000000000000000000000",
-      "preview_id": "00000000000000000000000000000000"
+      "id": "a64d797b75d4437eaa4fd24f3dd160db",
+      "preview_id": "ff1535aaf3e943b29c94a5ade1aed24c"
     }
   ],
   "queues": {
@@ -94,8 +96,5 @@
       "tag": "v1",
       "new_sqlite_classes": ["JobCoordinator"]
     }
-  ],
-  "limits": {
-    "cpu_ms": 300000
-  }
+  ]
 }
