@@ -8,10 +8,12 @@ import type {
   PersistedProviderSetting,
   PersistedRecommendation,
   PersistedScanRun,
+  PersistedTunnelRecord,
   ProviderConnectionTestResult,
   Recommendation,
   ScanResultBundle,
   ScanRunStatus,
+  TunnelConnectionTestResult,
 } from "../types";
 import { nowIso, safeJsonParse } from "./utils";
 
@@ -67,6 +69,40 @@ function toProviderSetting(
     lastTestedAt: (row.last_tested_at as string | null) ?? null,
     lastTestStatus:
       (row.last_test_status as PersistedProviderSetting["lastTestStatus"] | null) ??
+      null,
+    lastTestResultJson: (row.last_test_result_json as string | null) ?? null,
+    metadataJson: String(row.metadata_json ?? "{}"),
+    createdAt: String(row.created_at),
+    updatedAt: String(row.updated_at),
+  };
+}
+
+function toTunnelRecord(row: Record<string, unknown>): PersistedTunnelRecord {
+  return {
+    id: String(row.id),
+    providerSettingId: (row.provider_setting_id as string | null) ?? null,
+    cloudflareTunnelId: (row.cloudflare_tunnel_id as string | null) ?? null,
+    cloudflareTunnelName: (row.cloudflare_tunnel_name as string | null) ?? null,
+    cloudflareZoneId: (row.cloudflare_zone_id as string | null) ?? null,
+    publicHostname: String(row.public_hostname),
+    localServiceUrl: String(row.local_service_url),
+    accessProtected: Number(row.access_protected ?? 0) === 1,
+    accessAppId: (row.access_app_id as string | null) ?? null,
+    accessPolicyId: (row.access_policy_id as string | null) ?? null,
+    accessServiceTokenId:
+      (row.access_service_token_id as string | null) ?? null,
+    dnsRecordId: (row.dns_record_id as string | null) ?? null,
+    secretConfigured: Boolean(row.secret_envelope_json),
+    secretEnvelopeJson: (row.secret_envelope_json as string | null) ?? null,
+    connectorStatus:
+      row.connector_status as PersistedTunnelRecord["connectorStatus"],
+    status: row.status as PersistedTunnelRecord["status"],
+    lastConnectorHeartbeatAt:
+      (row.last_connector_heartbeat_at as string | null) ?? null,
+    lastTunnelHealthAt: (row.last_tunnel_health_at as string | null) ?? null,
+    lastTestedAt: (row.last_tested_at as string | null) ?? null,
+    lastTestStatus:
+      (row.last_test_status as PersistedTunnelRecord["lastTestStatus"] | null) ??
       null,
     lastTestResultJson: (row.last_test_result_json as string | null) ?? null,
     metadataJson: String(row.metadata_json ?? "{}"),
@@ -617,6 +653,193 @@ export async function storeProviderTestResult(
     .run();
 }
 
+export async function createTunnelRecord(
+  env: Env,
+  input: {
+    providerSettingId: string | null;
+    cloudflareTunnelId: string | null;
+    cloudflareTunnelName: string | null;
+    cloudflareZoneId: string | null;
+    publicHostname: string;
+    localServiceUrl: string;
+    accessProtected: boolean;
+    accessAppId: string | null;
+    accessPolicyId: string | null;
+    accessServiceTokenId: string | null;
+    dnsRecordId: string | null;
+    secretEnvelopeJson: string | null;
+    connectorStatus: PersistedTunnelRecord["connectorStatus"];
+    status: PersistedTunnelRecord["status"];
+    metadataJson: string;
+  },
+): Promise<string> {
+  const tunnelId = crypto.randomUUID();
+  const timestamp = nowIso();
+
+  await env.EDGE_DB.prepare(
+    `INSERT INTO tunnel_records (
+      id, provider_setting_id, cloudflare_tunnel_id, cloudflare_tunnel_name,
+      cloudflare_zone_id, public_hostname, local_service_url, access_protected,
+      access_app_id, access_policy_id, access_service_token_id, dns_record_id,
+      secret_envelope_json, connector_status, status, metadata_json, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  )
+    .bind(
+      tunnelId,
+      input.providerSettingId,
+      input.cloudflareTunnelId,
+      input.cloudflareTunnelName,
+      input.cloudflareZoneId,
+      input.publicHostname,
+      input.localServiceUrl,
+      input.accessProtected ? 1 : 0,
+      input.accessAppId,
+      input.accessPolicyId,
+      input.accessServiceTokenId,
+      input.dnsRecordId,
+      input.secretEnvelopeJson,
+      input.connectorStatus,
+      input.status,
+      input.metadataJson,
+      timestamp,
+      timestamp,
+    )
+    .run();
+
+  return tunnelId;
+}
+
+export async function updateTunnelRecord(
+  env: Env,
+  tunnelId: string,
+  input: {
+    providerSettingId: string | null;
+    cloudflareTunnelId: string | null;
+    cloudflareTunnelName: string | null;
+    cloudflareZoneId: string | null;
+    publicHostname: string;
+    localServiceUrl: string;
+    accessProtected: boolean;
+    accessAppId: string | null;
+    accessPolicyId: string | null;
+    accessServiceTokenId: string | null;
+    dnsRecordId: string | null;
+    secretEnvelopeJson: string | null;
+    connectorStatus: PersistedTunnelRecord["connectorStatus"];
+    status: PersistedTunnelRecord["status"];
+    lastConnectorHeartbeatAt?: string | null;
+    lastTunnelHealthAt?: string | null;
+    metadataJson: string;
+  },
+): Promise<void> {
+  await env.EDGE_DB.prepare(
+    `UPDATE tunnel_records
+     SET provider_setting_id = ?,
+         cloudflare_tunnel_id = ?,
+         cloudflare_tunnel_name = ?,
+         cloudflare_zone_id = ?,
+         public_hostname = ?,
+         local_service_url = ?,
+         access_protected = ?,
+         access_app_id = ?,
+         access_policy_id = ?,
+         access_service_token_id = ?,
+         dns_record_id = ?,
+         secret_envelope_json = ?,
+         connector_status = ?,
+         status = ?,
+         last_connector_heartbeat_at = COALESCE(?, last_connector_heartbeat_at),
+         last_tunnel_health_at = COALESCE(?, last_tunnel_health_at),
+         metadata_json = ?,
+         updated_at = ?
+     WHERE id = ?`,
+  )
+    .bind(
+      input.providerSettingId,
+      input.cloudflareTunnelId,
+      input.cloudflareTunnelName,
+      input.cloudflareZoneId,
+      input.publicHostname,
+      input.localServiceUrl,
+      input.accessProtected ? 1 : 0,
+      input.accessAppId,
+      input.accessPolicyId,
+      input.accessServiceTokenId,
+      input.dnsRecordId,
+      input.secretEnvelopeJson,
+      input.connectorStatus,
+      input.status,
+      input.lastConnectorHeartbeatAt ?? null,
+      input.lastTunnelHealthAt ?? null,
+      input.metadataJson,
+      nowIso(),
+      tunnelId,
+    )
+    .run();
+}
+
+export async function storeTunnelTestResult(
+  env: Env,
+  tunnelId: string,
+  result: TunnelConnectionTestResult,
+): Promise<void> {
+  const runtimeDetails =
+    result.details.runtime &&
+    typeof result.details.runtime === "object" &&
+    !Array.isArray(result.details.runtime)
+      ? (result.details.runtime as Record<string, unknown>)
+      : null;
+  const runtimeStatus =
+    typeof runtimeDetails?.status === "number" ? runtimeDetails.status : null;
+
+  await env.EDGE_DB.prepare(
+    `UPDATE tunnel_records
+     SET last_tested_at = ?,
+         last_test_status = ?,
+         last_test_result_json = ?,
+         last_tunnel_health_at = CASE WHEN ? IS NOT NULL THEN ? ELSE last_tunnel_health_at END,
+         updated_at = ?
+     WHERE id = ?`,
+  )
+    .bind(
+      result.testedAt,
+      result.status,
+      JSON.stringify(result),
+      runtimeStatus,
+      result.testedAt,
+      nowIso(),
+      tunnelId,
+    )
+    .run();
+}
+
+export async function markTunnelHeartbeat(
+  env: Env,
+  tunnelId: string,
+  input: {
+    connectorStatus: PersistedTunnelRecord["connectorStatus"];
+    metadataJson?: string;
+  },
+): Promise<void> {
+  const timestamp = nowIso();
+  await env.EDGE_DB.prepare(
+    `UPDATE tunnel_records
+     SET connector_status = ?,
+         last_connector_heartbeat_at = ?,
+         updated_at = ?,
+         metadata_json = COALESCE(?, metadata_json)
+     WHERE id = ?`,
+  )
+    .bind(
+      input.connectorStatus,
+      timestamp,
+      timestamp,
+      input.metadataJson ?? null,
+      tunnelId,
+    )
+    .run();
+}
+
 export async function listDomainHistory(
   env: Env,
   domain: string,
@@ -641,6 +864,18 @@ export async function listProviderSettings(
   return (result.results ?? []).map(toProviderSetting);
 }
 
+export async function listTunnelRecords(
+  env: Env,
+): Promise<PersistedTunnelRecord[]> {
+  const result = await env.EDGE_DB.prepare(
+    `SELECT *
+     FROM tunnel_records
+     ORDER BY updated_at DESC, created_at DESC`,
+  ).all<Record<string, unknown>>();
+
+  return (result.results ?? []).map(toTunnelRecord);
+}
+
 export async function getProviderSetting(
   env: Env,
   providerId: string,
@@ -654,12 +889,34 @@ export async function getProviderSetting(
   return row ? toProviderSetting(row) : null;
 }
 
+export async function getTunnelRecord(
+  env: Env,
+  tunnelId: string,
+): Promise<PersistedTunnelRecord | null> {
+  const row = await env.EDGE_DB.prepare(
+    `SELECT * FROM tunnel_records WHERE id = ?`,
+  )
+    .bind(tunnelId)
+    .first<Record<string, unknown>>();
+
+  return row ? toTunnelRecord(row) : null;
+}
+
 export async function deleteProviderSetting(
   env: Env,
   providerId: string,
 ): Promise<void> {
   await env.EDGE_DB.prepare(`DELETE FROM provider_settings WHERE id = ?`)
     .bind(providerId)
+    .run();
+}
+
+export async function deleteTunnelRecord(
+  env: Env,
+  tunnelId: string,
+): Promise<void> {
+  await env.EDGE_DB.prepare(`DELETE FROM tunnel_records WHERE id = ?`)
+    .bind(tunnelId)
     .run();
 }
 

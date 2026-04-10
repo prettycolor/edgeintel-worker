@@ -1,5 +1,5 @@
 import type { Env } from "../env";
-import type { ProviderSecretPayload } from "../types";
+import type { ProviderSecretPayload, TunnelSecretPayload } from "../types";
 
 interface SecretEnvelope {
   alg: "AES-GCM";
@@ -39,10 +39,12 @@ function decodeBase64(value: string): Uint8Array {
   return bytes;
 }
 
-async function importProviderSecretKey(env: Env): Promise<CryptoKey> {
+type SecretPayload = ProviderSecretPayload | TunnelSecretPayload;
+
+async function importSecretKey(env: Env): Promise<CryptoKey> {
   if (!env.PROVIDER_SECRET_ENCRYPTION_KEY) {
     throw new Error(
-      "PROVIDER_SECRET_ENCRYPTION_KEY must be configured before storing provider secrets.",
+      "PROVIDER_SECRET_ENCRYPTION_KEY must be configured before storing encrypted secrets.",
     );
   }
 
@@ -62,31 +64,29 @@ async function importProviderSecretKey(env: Env): Promise<CryptoKey> {
   );
 }
 
-function normalizeProviderSecrets(
-  payload: ProviderSecretPayload,
-): ProviderSecretPayload {
+function normalizeSecrets<T extends SecretPayload>(payload: T): T {
   return Object.fromEntries(
     Object.entries(payload)
       .filter((entry): entry is [string, string] => typeof entry[1] === "string")
       .map(([key, value]) => [key, value.trim()])
       .filter((entry) => entry[1].length > 0),
-  );
+  ) as T;
 }
 
-export function hasProviderSecretPayload(
-  payload: ProviderSecretPayload | null | undefined,
+export function hasSecretPayload<T extends SecretPayload>(
+  payload: T | null | undefined,
 ): boolean {
-  return Boolean(payload && Object.keys(normalizeProviderSecrets(payload)).length > 0);
+  return Boolean(payload && Object.keys(normalizeSecrets(payload)).length > 0);
 }
 
-export async function encryptProviderSecretPayload(
+export async function encryptSecretPayload<T extends SecretPayload>(
   env: Env,
-  payload: ProviderSecretPayload,
+  payload: T,
 ): Promise<string | null> {
-  const normalized = normalizeProviderSecrets(payload);
+  const normalized = normalizeSecrets(payload);
   if (Object.keys(normalized).length === 0) return null;
 
-  const key = await importProviderSecretKey(env);
+  const key = await importSecretKey(env);
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const plaintext = new TextEncoder().encode(JSON.stringify(normalized));
   const ciphertext = await crypto.subtle.encrypt(
@@ -108,24 +108,24 @@ export async function encryptProviderSecretPayload(
   return JSON.stringify(envelope);
 }
 
-export async function decryptProviderSecretPayload(
+export async function decryptSecretPayload<T extends SecretPayload>(
   env: Env,
   envelopeJson: string | null,
-): Promise<ProviderSecretPayload | null> {
+): Promise<T | null> {
   if (!envelopeJson) return null;
 
   let envelope: SecretEnvelope;
   try {
     envelope = JSON.parse(envelopeJson) as SecretEnvelope;
   } catch {
-    throw new Error("Stored provider secret envelope is invalid JSON.");
+    throw new Error("Stored encrypted secret envelope is invalid JSON.");
   }
 
   if (envelope.alg !== "AES-GCM" || envelope.version !== 1) {
-    throw new Error("Stored provider secret envelope uses an unsupported format.");
+    throw new Error("Stored encrypted secret envelope uses an unsupported format.");
   }
 
-  const key = await importProviderSecretKey(env);
+  const key = await importSecretKey(env);
   const plaintext = await crypto.subtle.decrypt(
     {
       name: "AES-GCM",
@@ -136,5 +136,45 @@ export async function decryptProviderSecretPayload(
   );
 
   const decoded = new TextDecoder().decode(plaintext);
-  return normalizeProviderSecrets(JSON.parse(decoded) as ProviderSecretPayload);
+  return normalizeSecrets(JSON.parse(decoded) as T);
+}
+
+export function hasProviderSecretPayload(
+  payload: ProviderSecretPayload | null | undefined,
+): boolean {
+  return hasSecretPayload(payload);
+}
+
+export async function encryptProviderSecretPayload(
+  env: Env,
+  payload: ProviderSecretPayload,
+): Promise<string | null> {
+  return encryptSecretPayload(env, payload);
+}
+
+export async function decryptProviderSecretPayload(
+  env: Env,
+  envelopeJson: string | null,
+): Promise<ProviderSecretPayload | null> {
+  return decryptSecretPayload<ProviderSecretPayload>(env, envelopeJson);
+}
+
+export function hasTunnelSecretPayload(
+  payload: TunnelSecretPayload | null | undefined,
+): boolean {
+  return hasSecretPayload(payload);
+}
+
+export async function encryptTunnelSecretPayload(
+  env: Env,
+  payload: TunnelSecretPayload,
+): Promise<string | null> {
+  return encryptSecretPayload(env, payload);
+}
+
+export async function decryptTunnelSecretPayload(
+  env: Env,
+  envelopeJson: string | null,
+): Promise<TunnelSecretPayload | null> {
+  return decryptSecretPayload<TunnelSecretPayload>(env, envelopeJson);
 }

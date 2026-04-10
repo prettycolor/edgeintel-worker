@@ -19,6 +19,8 @@
     "db:local:apply": "bash scripts/d1-local.sh apply",
     "db:local:list": "bash scripts/d1-local.sh list",
     "db:local:reset": "bash scripts/d1-local.sh reset",
+    "connector:once": "node connector/edgeintel-connector.mjs --once",
+    "connector:dry-run": "node connector/edgeintel-connector.mjs --dry-run",
     "verify": "npm run validate:install && npm run cf:types:check && npm run typecheck && npm run test && npm run deploy:dry-run"
   },
   "devDependencies": {

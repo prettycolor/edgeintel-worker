@@ -15,7 +15,13 @@ Cloudflare-native domain posture and remediation engine for the `hostingtool.dev
 - `GET|POST|PATCH|DELETE /api/settings/providers` plus
   `POST /api/settings/providers/:id/test` for provider control-plane
   configuration, encrypted secret storage, and connection testing
+- `GET|POST|PATCH|DELETE /api/tunnels` plus
+  `POST /api/tunnels/:id/test`,
+  `POST /api/tunnels/:id/rotate-token`, and
+  `POST /api/tunnels/:id/heartbeat` for local-model tunnel orchestration,
+  runtime testing, connector bootstrap, and heartbeat status
 - `GET /app` and `GET /app/providers` for the Worker-served provider control-plane UI
+- `GET /app/tunnels` for the Worker-served tunnel and local-model wizard workspace
 - `POST /api/scans/:scanRunId/ai-brief` to generate an evidence-bounded AI
   brief from persisted findings and recommendations
 - Durable Object job coordination with job snapshots and event streaming
@@ -53,6 +59,17 @@ Cloudflare-native domain posture and remediation engine for the `hostingtool.dev
   - per-provider connection testing for Workers AI, Anthropic, and
     OpenAI-compatible routes
   - persisted test status and result history for the app shell
+- Tunnel orchestration foundations with:
+  - remotely managed Cloudflare Tunnel provisioning
+  - proxied DNS CNAME management to `<tunnel-id>.cfargotunnel.com`
+  - optional Access reusable policy, service token, and self-hosted app creation
+  - persisted tunnel bootstrap and runtime test history
+  - connector heartbeat updates for machine-side status
+- Reference connector runtime with:
+  - bootstrap fetch from the Worker API
+  - `cloudflared` validation and launch
+  - local service probing
+  - heartbeat reporting back into EdgeIntel
 
 ## Layout
 
@@ -142,6 +159,14 @@ hosted-provider settings UI and local-model tunnel wizard.
 
 Phase 7B adds the first Worker-served app-shell surface at `/app/providers`.
 
+Phase 7C through 7E now add:
+
+- `/api/tunnels` orchestration
+- `/app/tunnels` local-model wizard UI
+- the reference connector in [`connector/`](./connector/README.md)
+- a route quickstart in
+  [docs/local-model-route-quickstart.md](./docs/local-model-route-quickstart.md)
+
 ## Current Scope
 
 This is the phase-0/1 implementation slice:
@@ -165,5 +190,9 @@ The implementation sequence is documented in [docs/implementation-phases.md](./d
 
 For the next onboarding-focused expansion, see
 [docs/provider-and-tunnel-wizard-roadmap.md](./docs/provider-and-tunnel-wizard-roadmap.md).
+
+For the local-model setup flow, start with
+[docs/local-model-route-quickstart.md](./docs/local-model-route-quickstart.md)
+and [connector/README.md](./connector/README.md).
 
 UI direction prototypes for Phase 7 live in [docs/mockups/README.md](./docs/mockups/README.md).

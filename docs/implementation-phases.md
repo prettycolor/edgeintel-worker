@@ -13,7 +13,15 @@ The goal of the next buildout is not to re-architect from scratch. It is to hard
   - encrypted secret persistence
   - provider CRUD APIs
   - provider connection tests and persisted test results
-- Remaining Phase 7 work is focused on the hosted-provider UI, tunnel orchestration, the local connector, and the local-model onboarding wizard.
+- Phase 7B provider control-plane UI is implemented at `/app/providers`.
+- Phase 7C tunnel orchestration backend is implemented:
+  - remotely managed Tunnel creation
+  - proxied DNS route management
+  - optional Access policy, token, and app creation
+  - tunnel runtime testing and bootstrap rotation
+- Phase 7D reference connector runtime is implemented in `connector/`.
+- Phase 7E local-model tunnel workspace is implemented at `/app/tunnels`.
+- Remaining Phase 7 work is now primarily packaging, visual polish, and deeper connector UX rather than missing control-plane fundamentals.
 
 ## Execution Protocol
 

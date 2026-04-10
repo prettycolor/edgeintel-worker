@@ -1234,8 +1234,11 @@ export function renderProviderControlPlaneApp(
           </div>
 
           <div class="nav-group">
-            <div class="nav-meta">Upcoming</div>
-            <div class="nav-item">Tunnel orchestration</div>
+            <div class="nav-meta">Runtime</div>
+            <a class="nav-item" href="/app/tunnels" style="text-decoration:none">
+              Tunnel orchestration
+              <span class="badge">live</span>
+            </a>
             <div class="nav-item">Connector pairing</div>
             <div class="nav-item">Local wizard</div>
             <div class="nav-item">Health history</div>
@@ -1261,6 +1264,9 @@ export function renderProviderControlPlaneApp(
                 <span class="dot"></span>
                 Worker route live
               </div>
+              <a class="pill" href="/app/tunnels" style="text-decoration:none;color:inherit">
+                Tunnel workspace
+              </a>
               <div class="pill" id="last-refresh">Syncing…</div>
             </div>
           </div>

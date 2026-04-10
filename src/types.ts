@@ -29,6 +29,14 @@ export type ProviderKind =
   | "local-gateway";
 export type ProviderStatus = "draft" | "ready" | "error" | "disabled";
 export type ProviderTestStatus = "passed" | "failed" | "warning";
+export type TunnelStatus = "draft" | "provisioning" | "ready" | "error" | "deleting";
+export type TunnelConnectorStatus =
+  | "unpaired"
+  | "awaiting_connector"
+  | "connected"
+  | "degraded"
+  | "offline";
+export type TunnelTestStatus = "passed" | "failed" | "warning";
 
 export interface ScanRequestBody {
   domain?: string;
@@ -72,6 +80,38 @@ export interface ProviderSettingsRequestBody {
 
 export interface ProviderTestRequestBody {
   persistResult?: boolean;
+}
+
+export interface TunnelSecretPayload {
+  tunnelToken?: string;
+  accessClientId?: string;
+  accessClientSecret?: string;
+  [key: string]: string | undefined;
+}
+
+export interface TunnelSettingsRequestBody {
+  providerSettingId?: string | null;
+  cloudflareZoneId?: string | null;
+  publicHostname?: string;
+  tunnelName?: string;
+  localServiceUrl?: string;
+  accessProtected?: boolean;
+  status?: TunnelStatus;
+  connectorStatus?: TunnelConnectorStatus;
+  metadata?: Record<string, unknown>;
+}
+
+export interface TunnelTestRequestBody {
+  persistResult?: boolean;
+  includeRuntimeProbe?: boolean;
+}
+
+export interface TunnelHeartbeatRequestBody {
+  connectorStatus?: TunnelConnectorStatus;
+  version?: string;
+  localServiceReachable?: boolean;
+  model?: string | null;
+  note?: string | null;
 }
 
 export interface ScanTarget {
@@ -266,6 +306,16 @@ export interface ProviderConnectionTestResult {
   testedAt: string;
 }
 
+export interface TunnelConnectionTestResult {
+  status: TunnelTestStatus;
+  message: string;
+  latencyMs: number;
+  publicHostname: string | null;
+  tunnelId: string | null;
+  details: Record<string, unknown>;
+  testedAt: string;
+}
+
 export interface ScanResultBundle {
   domain: string;
   scannedAt: string;
@@ -371,6 +421,33 @@ export interface PersistedProviderSetting {
   secretEnvelopeJson: string | null;
   lastTestedAt: string | null;
   lastTestStatus: ProviderTestStatus | null;
+  lastTestResultJson: string | null;
+  metadataJson: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PersistedTunnelRecord {
+  id: string;
+  providerSettingId: string | null;
+  cloudflareTunnelId: string | null;
+  cloudflareTunnelName: string | null;
+  cloudflareZoneId: string | null;
+  publicHostname: string;
+  localServiceUrl: string;
+  accessProtected: boolean;
+  accessAppId: string | null;
+  accessPolicyId: string | null;
+  accessServiceTokenId: string | null;
+  dnsRecordId: string | null;
+  secretConfigured: boolean;
+  secretEnvelopeJson: string | null;
+  connectorStatus: TunnelConnectorStatus;
+  status: TunnelStatus;
+  lastConnectorHeartbeatAt: string | null;
+  lastTunnelHealthAt: string | null;
+  lastTestedAt: string | null;
+  lastTestStatus: TunnelTestStatus | null;
   lastTestResultJson: string | null;
   metadataJson: string;
   createdAt: string;

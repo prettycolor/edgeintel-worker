@@ -10,8 +10,12 @@ AI_UPSTREAM_API_KEY=
 # Optional Browser Rendering REST token.
 BROWSER_RENDERING_API_TOKEN=
 
+# Optional Cloudflare API token for Tunnel, DNS, and Access orchestration.
+CLOUDFLARE_API_TOKEN=
+
 # Optional Cloudflare account identifier for account-scoped helpers.
 CLOUDFLARE_ACCOUNT_ID=
+CLOUDFLARE_ZONE_ID=
 
 # Optional base64-encoded 32-byte encryption key for provider secret storage.
 PROVIDER_SECRET_ENCRYPTION_KEY=

@@ -22,12 +22,18 @@ Implemented now:
 
 Not implemented yet:
 
-- user-facing provider settings UI
-- API key management UI
 - provider OAuth onboarding
+- local-machine installation of `cloudflared`
+- packaged desktop or tray wrapper around the reference connector
+
+Implemented since the original draft:
+
+- user-facing provider settings UI at `/app/providers`
 - automatic Cloudflare Tunnel creation from the app
-- local-machine installation or startup of `cloudflared`
-- connection testing and ongoing connector health
+- tunnel DNS and Access orchestration through the Worker API
+- user-facing tunnel wizard UI at `/app/tunnels`
+- connection testing and persisted tunnel health from the app
+- reference connector runtime with heartbeat support
 
 ## Hard Platform Boundary
 

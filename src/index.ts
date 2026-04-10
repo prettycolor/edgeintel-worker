@@ -6,8 +6,10 @@ import {
   createJob,
   createScanRuns,
   createProviderSetting,
+  createTunnelRecord,
   deleteDomainWatch,
   deleteProviderSetting,
+  deleteTunnelRecord,
   getArtifactsForRun,
   getDomainWatch,
   getExportRecord,
@@ -15,23 +17,28 @@ import {
   getJob,
   getLatestRunForDomain,
   getProviderSetting,
+  getTunnelRecord,
   getRecommendationsForRun,
   getRunsForJob,
   getScanContext,
   getScanRun,
   insertArtifact,
   listProviderSettings,
+  listTunnelRecords,
   listDueDomainWatches,
   listDomainHistory,
   markRunFailed,
   markDomainWatchEnqueued,
   markRunStarted,
+  markTunnelHeartbeat,
   recalculateJobStatus,
   storeProviderTestResult,
+  storeTunnelTestResult,
   storeRunBundle,
   attachWorkflowInstance,
   upsertDomainWatch,
   updateProviderSetting,
+  updateTunnelRecord,
 } from "./lib/repository";
 import { buildCanonicalUrl, normalizeDomain, normalizeRequestedDomains } from "./lib/domain";
 import {
@@ -65,10 +72,22 @@ import {
   serializeProviderSetting,
   testProviderConnection,
 } from "./lib/provider-settings";
+import {
+  buildTunnelConnectorBootstrap,
+  destroyTunnelResources,
+  getCloudflareControlPlaneReadiness,
+  normalizeTunnelSettingsInput,
+  provisionTunnelResources,
+  serializeTunnelRecord,
+  testTunnelConnection,
+} from "./lib/tunnels";
 import { renderProviderControlPlaneApp } from "./lib/app-shell";
+import { renderTunnelControlPlaneApp } from "./lib/tunnel-app-shell";
 import {
   decryptProviderSecretPayload,
+  decryptTunnelSecretPayload,
   encryptProviderSecretPayload,
+  encryptTunnelSecretPayload,
 } from "./lib/secrets";
 import type {
   AiBriefRequestBody,
@@ -80,6 +99,9 @@ import type {
   ScanQueueMessage,
   ScanRequestBody,
   ScanWorkflowParams,
+  TunnelSettingsRequestBody,
+  TunnelHeartbeatRequestBody,
+  TunnelTestRequestBody,
 } from "./types";
 import { EdgeIntelScanWorkflow } from "./workflows/scan-workflow";
 
@@ -342,6 +364,21 @@ function handleProviderControlPlaneApp(): Response {
   );
 }
 
+function handleTunnelControlPlaneApp(): Response {
+  return new Response(
+    renderTunnelControlPlaneApp({
+      tunnelsEndpoint: "/api/tunnels",
+      providersEndpoint: "/api/settings/providers",
+    }),
+    {
+      headers: {
+        "content-type": "text/html; charset=utf-8",
+        "cache-control": "no-store",
+      },
+    },
+  );
+}
+
 async function handleListProviders(env: Env): Promise<Response> {
   const providers = await listProviderSettings(env);
   return jsonResponse({
@@ -536,6 +573,351 @@ async function handleTestProvider(
       { status: 502 },
     );
   }
+}
+
+async function handleListTunnels(env: Env): Promise<Response> {
+  const tunnels = await listTunnelRecords(env);
+  return jsonResponse({
+    tunnels: tunnels.map(serializeTunnelRecord),
+    controlPlane: getCloudflareControlPlaneReadiness(env),
+  });
+}
+
+async function handleGetTunnel(env: Env, tunnelId: string): Promise<Response> {
+  const tunnel = await getTunnelRecord(env, tunnelId);
+  if (!tunnel) return notFound("Tunnel record not found.");
+
+  const secrets = await decryptTunnelSecretPayload(env, tunnel.secretEnvelopeJson);
+  return jsonResponse({
+    tunnel: serializeTunnelRecord(tunnel),
+    bootstrap: buildTunnelConnectorBootstrap(tunnel, secrets),
+  });
+}
+
+async function handleCreateTunnel(
+  request: Request,
+  env: Env,
+): Promise<Response> {
+  let body: TunnelSettingsRequestBody;
+  try {
+    body = (await request.json()) as TunnelSettingsRequestBody;
+  } catch {
+    return badRequest("Request body must be valid JSON.");
+  }
+
+  try {
+    const normalized = normalizeTunnelSettingsInput(body, env);
+
+    if (normalized.providerSettingId) {
+      const provider = await getProviderSetting(env, normalized.providerSettingId);
+      if (!provider) {
+        return notFound("Linked provider setting not found.");
+      }
+    }
+
+    const provisioned = await provisionTunnelResources(env, normalized);
+    const secretEnvelopeJson = provisioned.secrets
+      ? await encryptTunnelSecretPayload(env, provisioned.secrets)
+      : null;
+
+    const tunnelId = await createTunnelRecord(env, {
+      providerSettingId: normalized.providerSettingId,
+      cloudflareTunnelId: provisioned.cloudflareTunnelId,
+      cloudflareTunnelName: provisioned.cloudflareTunnelName,
+      cloudflareZoneId: provisioned.cloudflareZoneId,
+      publicHostname: provisioned.publicHostname,
+      localServiceUrl: provisioned.localServiceUrl,
+      accessProtected: provisioned.accessProtected,
+      accessAppId: provisioned.accessAppId,
+      accessPolicyId: provisioned.accessPolicyId,
+      accessServiceTokenId: provisioned.accessServiceTokenId,
+      dnsRecordId: provisioned.dnsRecordId,
+      secretEnvelopeJson,
+      connectorStatus: provisioned.connectorStatus,
+      status: provisioned.status,
+      metadataJson: JSON.stringify(provisioned.metadata),
+    });
+
+    const created = await getTunnelRecord(env, tunnelId);
+    if (!created) {
+      return jsonResponse(
+        { error: "Tunnel was created but could not be loaded." },
+        { status: 500 },
+      );
+    }
+
+    return jsonResponse(
+      {
+        tunnel: serializeTunnelRecord(created),
+        bootstrap: buildTunnelConnectorBootstrap(created, provisioned.secrets),
+      },
+      { status: 201 },
+    );
+  } catch (error) {
+    return badRequest(
+      error instanceof Error ? error.message : "Invalid tunnel payload.",
+    );
+  }
+}
+
+async function handleUpdateTunnel(
+  request: Request,
+  env: Env,
+  tunnelId: string,
+): Promise<Response> {
+  const existing = await getTunnelRecord(env, tunnelId);
+  if (!existing) return notFound("Tunnel record not found.");
+
+  let body: TunnelSettingsRequestBody;
+  try {
+    body = (await request.json()) as TunnelSettingsRequestBody;
+  } catch {
+    return badRequest("Request body must be valid JSON.");
+  }
+
+  try {
+    const normalized = normalizeTunnelSettingsInput(body, env, {
+      partial: true,
+      existing,
+    });
+
+    if (normalized.providerSettingId) {
+      const provider = await getProviderSetting(env, normalized.providerSettingId);
+      if (!provider) {
+        return notFound("Linked provider setting not found.");
+      }
+    }
+
+    const existingSecrets = await decryptTunnelSecretPayload(
+      env,
+      existing.secretEnvelopeJson,
+    );
+    const provisioned = await provisionTunnelResources(env, normalized, {
+      existing,
+      existingSecrets,
+    });
+
+    const secretEnvelopeJson = provisioned.secrets
+      ? await encryptTunnelSecretPayload(env, provisioned.secrets)
+      : null;
+
+    await updateTunnelRecord(env, tunnelId, {
+      providerSettingId: normalized.providerSettingId,
+      cloudflareTunnelId: provisioned.cloudflareTunnelId,
+      cloudflareTunnelName: provisioned.cloudflareTunnelName,
+      cloudflareZoneId: provisioned.cloudflareZoneId,
+      publicHostname: provisioned.publicHostname,
+      localServiceUrl: provisioned.localServiceUrl,
+      accessProtected: provisioned.accessProtected,
+      accessAppId: provisioned.accessAppId,
+      accessPolicyId: provisioned.accessPolicyId,
+      accessServiceTokenId: provisioned.accessServiceTokenId,
+      dnsRecordId: provisioned.dnsRecordId,
+      secretEnvelopeJson,
+      connectorStatus: provisioned.connectorStatus,
+      status: provisioned.status,
+      metadataJson: JSON.stringify(provisioned.metadata),
+    });
+
+    const updated = await getTunnelRecord(env, tunnelId);
+    if (!updated) {
+      return jsonResponse(
+        { error: "Tunnel was updated but could not be loaded." },
+        { status: 500 },
+      );
+    }
+
+    return jsonResponse({
+      tunnel: serializeTunnelRecord(updated),
+      bootstrap: buildTunnelConnectorBootstrap(updated, provisioned.secrets),
+    });
+  } catch (error) {
+    return badRequest(
+      error instanceof Error ? error.message : "Invalid tunnel payload.",
+    );
+  }
+}
+
+async function handleDeleteTunnel(env: Env, tunnelId: string): Promise<Response> {
+  const existing = await getTunnelRecord(env, tunnelId);
+  if (!existing) return notFound("Tunnel record not found.");
+
+  try {
+    await destroyTunnelResources(env, existing);
+    await deleteTunnelRecord(env, tunnelId);
+    return jsonResponse({
+      deleted: true,
+      tunnelId,
+    });
+  } catch (error) {
+    return jsonResponse(
+      {
+        error:
+          error instanceof Error
+            ? error.message
+            : "Tunnel deletion failed.",
+      },
+      { status: 502 },
+    );
+  }
+}
+
+async function handleTestTunnel(
+  request: Request,
+  env: Env,
+  tunnelId: string,
+): Promise<Response> {
+  const tunnel = await getTunnelRecord(env, tunnelId);
+  if (!tunnel) return notFound("Tunnel record not found.");
+
+  const body = (await request.json().catch(() => ({}))) as TunnelTestRequestBody;
+  const secrets = await decryptTunnelSecretPayload(env, tunnel.secretEnvelopeJson);
+  const provider = tunnel.providerSettingId
+    ? await getProviderSetting(env, tunnel.providerSettingId)
+    : null;
+
+  try {
+    const result = await testTunnelConnection(
+      env,
+      tunnel,
+      secrets,
+      provider,
+      body,
+    );
+
+    if (body.persistResult !== false) {
+      await storeTunnelTestResult(env, tunnelId, result);
+    }
+
+    const refreshed = await getTunnelRecord(env, tunnelId);
+    return jsonResponse({
+      tunnel: refreshed ? serializeTunnelRecord(refreshed) : serializeTunnelRecord(tunnel),
+      bootstrap: buildTunnelConnectorBootstrap(
+        refreshed ?? tunnel,
+        secrets,
+      ),
+      testResult: result,
+    });
+  } catch (error) {
+    const failure = {
+      status: "failed",
+      message:
+        error instanceof Error
+          ? error.message
+          : "Tunnel connection test failed.",
+      latencyMs: 0,
+      publicHostname: tunnel.publicHostname,
+      tunnelId: tunnel.cloudflareTunnelId,
+      details: {},
+      testedAt: new Date().toISOString(),
+    } as const;
+
+    if (body.persistResult !== false) {
+      await storeTunnelTestResult(env, tunnelId, failure);
+    }
+
+    return jsonResponse(
+      {
+        tunnel: serializeTunnelRecord((await getTunnelRecord(env, tunnelId)) ?? tunnel),
+        bootstrap: buildTunnelConnectorBootstrap(tunnel, secrets),
+        testResult: failure,
+      },
+      { status: 502 },
+    );
+  }
+}
+
+async function handleRotateTunnelToken(
+  env: Env,
+  tunnelId: string,
+): Promise<Response> {
+  const existing = await getTunnelRecord(env, tunnelId);
+  if (!existing) return notFound("Tunnel record not found.");
+  if (!existing.cloudflareTunnelId) {
+    return badRequest("Tunnel record is missing the Cloudflare tunnel ID.");
+  }
+
+  const normalized = normalizeTunnelSettingsInput({}, env, {
+    partial: true,
+    existing,
+  });
+  const existingSecrets = await decryptTunnelSecretPayload(env, existing.secretEnvelopeJson);
+  const provisioned = await provisionTunnelResources(env, normalized, {
+    existing,
+    existingSecrets,
+    rotateAccessTokens: true,
+  });
+  const secretEnvelopeJson = provisioned.secrets
+    ? await encryptTunnelSecretPayload(env, provisioned.secrets)
+    : null;
+
+  await updateTunnelRecord(env, tunnelId, {
+    providerSettingId: existing.providerSettingId,
+    cloudflareTunnelId: provisioned.cloudflareTunnelId,
+    cloudflareTunnelName: provisioned.cloudflareTunnelName,
+    cloudflareZoneId: provisioned.cloudflareZoneId,
+    publicHostname: provisioned.publicHostname,
+    localServiceUrl: provisioned.localServiceUrl,
+    accessProtected: provisioned.accessProtected,
+    accessAppId: provisioned.accessAppId,
+    accessPolicyId: provisioned.accessPolicyId,
+    accessServiceTokenId: provisioned.accessServiceTokenId,
+    dnsRecordId: provisioned.dnsRecordId,
+    secretEnvelopeJson,
+    connectorStatus: provisioned.connectorStatus,
+    status: provisioned.status,
+    metadataJson: JSON.stringify({
+      ...provisioned.metadata,
+      rotatedAt: new Date().toISOString(),
+    }),
+  });
+
+  const refreshed = await getTunnelRecord(env, tunnelId);
+  return jsonResponse({
+    tunnel: refreshed ? serializeTunnelRecord(refreshed) : serializeTunnelRecord(existing),
+    bootstrap: buildTunnelConnectorBootstrap(
+      refreshed ?? existing,
+      provisioned.secrets,
+    ),
+    rotated: true,
+  });
+}
+
+async function handleTunnelHeartbeat(
+  request: Request,
+  env: Env,
+  tunnelId: string,
+): Promise<Response> {
+  const existing = await getTunnelRecord(env, tunnelId);
+  if (!existing) return notFound("Tunnel record not found.");
+
+  const body = (await request.json().catch(() => ({}))) as TunnelHeartbeatRequestBody;
+  const connectorStatus = body.connectorStatus ?? "connected";
+  const currentMetadata = safeJsonParse<Record<string, unknown>>(
+    existing.metadataJson,
+    {},
+  );
+
+  await markTunnelHeartbeat(env, tunnelId, {
+    connectorStatus,
+    metadataJson: JSON.stringify({
+      ...currentMetadata,
+      connector: {
+        status: connectorStatus,
+        version: body.version ?? null,
+        localServiceReachable: body.localServiceReachable ?? null,
+        model: body.model ?? null,
+        note: body.note ?? null,
+        heartbeatAt: new Date().toISOString(),
+      },
+    }),
+  });
+
+  const refreshed = await getTunnelRecord(env, tunnelId);
+  return jsonResponse({
+    ok: true,
+    tunnel: refreshed ? serializeTunnelRecord(refreshed) : serializeTunnelRecord(existing),
+  });
 }
 
 async function handleManualRescan(env: Env, domainParam: string): Promise<Response> {
@@ -890,6 +1272,10 @@ export default class EdgeIntelWorker extends WorkerEntrypoint<Env> {
       return handleProviderControlPlaneApp();
     }
 
+    if (request.method === "GET" && path === "/app/tunnels") {
+      return handleTunnelControlPlaneApp();
+    }
+
     if (request.method === "POST" && path === "/api/scan") {
       return handleCreateScan(request, this.env);
     }
@@ -942,6 +1328,53 @@ export default class EdgeIntelWorker extends WorkerEntrypoint<Env> {
       /^\/api\/settings\/providers\/[^/]+\/test$/.test(path)
     ) {
       return handleTestProvider(request, this.env, path.split("/")[4]);
+    }
+
+    if (request.method === "GET" && path === "/api/tunnels") {
+      return handleListTunnels(this.env);
+    }
+
+    if (request.method === "POST" && path === "/api/tunnels") {
+      return handleCreateTunnel(request, this.env);
+    }
+
+    if (request.method === "GET" && /^\/api\/tunnels\/[^/]+$/.test(path)) {
+      return handleGetTunnel(this.env, path.split("/")[3]);
+    }
+
+    if (
+      request.method === "PATCH" &&
+      /^\/api\/tunnels\/[^/]+$/.test(path)
+    ) {
+      return handleUpdateTunnel(request, this.env, path.split("/")[3]);
+    }
+
+    if (
+      request.method === "DELETE" &&
+      /^\/api\/tunnels\/[^/]+$/.test(path)
+    ) {
+      return handleDeleteTunnel(this.env, path.split("/")[3]);
+    }
+
+    if (
+      request.method === "POST" &&
+      /^\/api\/tunnels\/[^/]+\/test$/.test(path)
+    ) {
+      return handleTestTunnel(request, this.env, path.split("/")[3]);
+    }
+
+    if (
+      request.method === "POST" &&
+      /^\/api\/tunnels\/[^/]+\/rotate-token$/.test(path)
+    ) {
+      return handleRotateTunnelToken(this.env, path.split("/")[3]);
+    }
+
+    if (
+      request.method === "POST" &&
+      /^\/api\/tunnels\/[^/]+\/heartbeat$/.test(path)
+    ) {
+      return handleTunnelHeartbeat(request, this.env, path.split("/")[3]);
     }
 
     if (request.method === "GET" && /^\/api\/domains\/[^/]+\/history$/.test(path)) {
