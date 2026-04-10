@@ -6,6 +6,9 @@ defensible.
 It is intentionally written as a roadmap, not a false claim that the system is
 already fully hardened.
 
+This roadmap is now formalized as
+[`Phase 16: Security, Threat Modeling, And Adversarial Test Suite`](/Users/b.rad/Documents/GitHub/edgeintel-worker/docs/phase-16-security-plan.md).
+
 ## Maintenance Baseline
 
 ### What should run automatically

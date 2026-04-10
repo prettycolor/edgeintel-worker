@@ -66,13 +66,20 @@ The goal of the next buildout is not to re-architect from scratch. It is to hard
   - the repo now includes a canonical demo script, demo domain set, architecture story, and visual QA checklist
   - the React operator-shell scaffold now reflects the completed control-plane and commercial-output story
   - the remaining work is now release packaging and future expansions rather than missing core product layers
-- The release layer is now in progress:
+- The release layer baseline is implemented:
   - deploy runbook for a signed-in Cloudflare account
   - operator quickstart for the current app and API surfaces
   - public repo release checklist
   - MCP server evaluation and future phase definition
   - maintenance and security roadmap
   - CI plus Dependabot for baseline repo upkeep
+- There are no known missing core implementation items from the current product
+  roadmap that need to land before the security phase.
+- Remaining non-security work is now release-finalization work:
+  - final visual QA and polish
+  - notarized macOS distribution
+  - release tags / GitHub Releases
+  - public package publishing at the very end
 
 Public package publishing remains intentionally deferred until the final release
 pass.
@@ -87,6 +94,14 @@ Every phase follows the same build discipline:
 4. only then move to the next phase
 
 This repo should advance one verified phase at a time rather than accumulating speculative unfinished layers.
+
+## Next Logical Phases
+
+The next phase is **Phase 16: Security, Threat Modeling, And Adversarial Test
+Suite**.
+
+The phase after that is **Phase 17: Authenticated EdgeIntel MCP**, but only if
+Phase 16 closes cleanly and the MCP decision gate still holds.
 
 ## Phase 0: Foundation Lock-In
 

@@ -311,6 +311,7 @@ Release/operator docs now live in:
 - [docs/release-checklist.md](./docs/release-checklist.md)
 - [docs/mcp-server-evaluation.md](./docs/mcp-server-evaluation.md)
 - [docs/maintenance-and-security-roadmap.md](./docs/maintenance-and-security-roadmap.md)
+- [docs/phase-16-security-plan.md](./docs/phase-16-security-plan.md)
 
 The repo wiki Home page is now available in the GitHub wiki and should become
 the canonical operator/setup guide as later phases land.
