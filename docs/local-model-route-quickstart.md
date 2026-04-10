@@ -34,11 +34,16 @@ Recommended settings for a local Ollama route:
 Fill:
 
 - linked provider
-- Cloudflare zone ID
+- Cloudflare zone
 - public hostname
 - local service URL
 - optional tunnel name
 - whether Access service-token protection should be enabled
+
+The tunnel workspace now auto-discovers available Cloudflare zones from the API
+token and validates the hostname inline. In the common case, the operator can
+leave the zone selector on auto-match and let EdgeIntel pick the best suffix
+match before provisioning.
 
 4. Save the route.
 

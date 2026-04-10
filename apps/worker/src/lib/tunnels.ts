@@ -1,5 +1,8 @@
 import type { Env } from "../env";
 import type {
+  CloudflareZoneView,
+  HostnameConflictView,
+  HostnameValidationResult,
   PersistedProviderSetting,
   PersistedTunnelRecord,
   TunnelConnectionTestResult,
@@ -59,6 +62,19 @@ interface CloudflareDnsRecordResponse {
   type?: string;
   content?: string;
   proxied?: boolean;
+}
+
+interface CloudflareZoneResponse {
+  id?: string;
+  name?: string;
+  status?: string;
+  paused?: boolean;
+  account?: {
+    name?: string;
+  };
+  plan?: {
+    name?: string;
+  };
 }
 
 interface CloudflareAccessServiceTokenCreateResponse {
@@ -147,6 +163,8 @@ export interface TunnelProvisioningResult {
   metadata: Record<string, unknown>;
   secrets: TunnelSecretPayload | null;
 }
+
+const ZONE_PAGE_SIZE = 100;
 
 function requireCloudflareCredentials(env: Env): {
   accountId: string;
@@ -361,14 +379,19 @@ export function buildTunnelConnectorBootstrap(
 export function getCloudflareControlPlaneReadiness(env: Env): {
   configured: boolean;
   missing: string[];
+  defaults: {
+    zoneId: string | null;
+  };
 } {
   const missing: string[] = [];
   if (!env.CLOUDFLARE_API_TOKEN?.trim()) missing.push("CLOUDFLARE_API_TOKEN");
   if (!env.CLOUDFLARE_ACCOUNT_ID?.trim()) missing.push("CLOUDFLARE_ACCOUNT_ID");
-  if (!env.CLOUDFLARE_ZONE_ID?.trim()) missing.push("CLOUDFLARE_ZONE_ID");
   return {
     configured: missing.length === 0,
     missing,
+    defaults: {
+      zoneId: trimOrNull(env.CLOUDFLARE_ZONE_ID),
+    },
   };
 }
 
@@ -416,6 +439,192 @@ async function cloudflareRequest<T>(
   }
 
   return payload.result;
+}
+
+function toZoneView(
+  row: CloudflareZoneResponse,
+  defaultZoneId: string | null,
+): CloudflareZoneView | null {
+  if (!row.id || !row.name) return null;
+  return {
+    id: row.id,
+    name: row.name.toLowerCase(),
+    status: row.status ?? null,
+    paused: Boolean(row.paused),
+    planName: row.plan?.name ?? null,
+    accountName: row.account?.name ?? null,
+    isDefault: row.id === defaultZoneId,
+  };
+}
+
+function hostnameMatchesZone(hostname: string, zoneName: string): boolean {
+  return hostname === zoneName || hostname.endsWith(`.${zoneName}`);
+}
+
+function pickBestZoneForHostname(
+  zones: CloudflareZoneView[],
+  hostname: string,
+): CloudflareZoneView | null {
+  return (
+    [...zones]
+      .filter((zone) => hostnameMatchesZone(hostname, zone.name))
+      .sort((left, right) => right.name.length - left.name.length)[0] ?? null
+  );
+}
+
+export async function listCloudflareZones(env: Env): Promise<CloudflareZoneView[]> {
+  const defaultZoneId = trimOrNull(env.CLOUDFLARE_ZONE_ID);
+  const zones: CloudflareZoneView[] = [];
+
+  for (let page = 1; page <= 10; page += 1) {
+    const result = await cloudflareRequest<CloudflareZoneResponse[]>(env, {
+      method: "GET",
+      path: "/zones",
+      query: {
+        page,
+        per_page: ZONE_PAGE_SIZE,
+      },
+    });
+
+    const pageZones = result
+      .map((entry) => toZoneView(entry, defaultZoneId))
+      .filter((entry): entry is CloudflareZoneView => Boolean(entry));
+    zones.push(...pageZones);
+
+    if (result.length < ZONE_PAGE_SIZE) {
+      break;
+    }
+  }
+
+  return zones.sort((left, right) => left.name.localeCompare(right.name));
+}
+
+export async function validateTunnelHostname(
+  env: Env,
+  input: {
+    publicHostname: string;
+    cloudflareZoneId?: string | null;
+    existingTunnelId?: string | null;
+  },
+): Promise<HostnameValidationResult> {
+  const hostname = ensurePublicHostname(input.publicHostname);
+  const zones = await listCloudflareZones(env);
+  const requestedZoneId = trimOrNull(input.cloudflareZoneId);
+  const explicitZone = requestedZoneId
+    ? zones.find((zone) => zone.id === requestedZoneId) ?? null
+    : null;
+  const defaultZone =
+    zones.find((zone) => zone.isDefault) ??
+    (trimOrNull(env.CLOUDFLARE_ZONE_ID)
+      ? ({
+          id: trimOrNull(env.CLOUDFLARE_ZONE_ID) ?? "",
+          name: "",
+          status: null,
+          paused: false,
+          planName: null,
+          accountName: null,
+          isDefault: true,
+        } satisfies CloudflareZoneView)
+      : null);
+
+  let matchedBy: HostnameValidationResult["matchedBy"] = "none";
+  let zone: CloudflareZoneView | null = null;
+
+  if (explicitZone) {
+    zone = explicitZone;
+    matchedBy = "provided-zone";
+  } else if (requestedZoneId) {
+    return {
+      status: "invalid",
+      hostname,
+      zone: null,
+      matchedBy,
+      suggestedZoneId: null,
+      suggestedTunnelName: `edgeintel-${slugify(hostname).slice(0, 44) || "local-model"}`,
+      conflicts: [],
+      existingTunnelRecordConflict: false,
+      message: "The selected Cloudflare zone could not be found for this API token.",
+    };
+  } else {
+    zone = pickBestZoneForHostname(zones, hostname);
+    matchedBy = zone ? "suffix-match" : "none";
+    if (!zone && defaultZone && defaultZone.name && hostnameMatchesZone(hostname, defaultZone.name)) {
+      zone = defaultZone;
+      matchedBy = "default-zone";
+    }
+  }
+
+  if (!zone || !hostnameMatchesZone(hostname, zone.name)) {
+    return {
+      status: "invalid",
+      hostname,
+      zone,
+      matchedBy: zone ? matchedBy : "none",
+      suggestedZoneId: null,
+      suggestedTunnelName: `edgeintel-${slugify(hostname).slice(0, 44) || "local-model"}`,
+      conflicts: [],
+      existingTunnelRecordConflict: false,
+      message:
+        "No Cloudflare zone available to this token matches the requested hostname. Pick a hostname under a discovered zone or choose a different zone.",
+    };
+  }
+
+  const existingRecords = await cloudflareRequest<CloudflareDnsRecordResponse[]>(env, {
+    method: "GET",
+    path: `/zones/${zone.id}/dns_records`,
+    query: {
+      "name.exact": hostname,
+      per_page: 25,
+    },
+  });
+
+  const expectedTarget = input.existingTunnelId
+    ? `${input.existingTunnelId}.cfargotunnel.com`
+    : null;
+
+  const conflicts: HostnameConflictView[] = existingRecords.map((record) => ({
+    id: record.id ?? null,
+    type: record.type ?? "unknown",
+    name: record.name ?? hostname,
+    content: record.content ?? null,
+    proxied: typeof record.proxied === "boolean" ? record.proxied : null,
+  }));
+
+  const blockingConflicts = conflicts.filter((record) => {
+    if (record.type !== "CNAME") return true;
+    if (!expectedTarget) return true;
+    return record.content !== expectedTarget;
+  });
+
+  if (blockingConflicts.length > 0) {
+    return {
+      status: "warning",
+      hostname,
+      zone,
+      matchedBy,
+      suggestedZoneId: zone.id,
+      suggestedTunnelName: `edgeintel-${slugify(hostname).slice(0, 44) || "local-model"}`,
+      conflicts,
+      existingTunnelRecordConflict: true,
+      message:
+        "The hostname already has DNS records in the matched zone. Review the conflicts before provisioning or updating this tunnel route.",
+    };
+  }
+
+  return {
+    status: "valid",
+    hostname,
+    zone,
+    matchedBy,
+    suggestedZoneId: zone.id,
+    suggestedTunnelName: `edgeintel-${slugify(hostname).slice(0, 44) || "local-model"}`,
+    conflicts,
+    existingTunnelRecordConflict: false,
+    message:
+      conflicts.length > 0
+        ? "The hostname already points at this EdgeIntel tunnel target."
+        : "The hostname is clear to provision in the matched Cloudflare zone.",
+  };
 }
 
 async function createCloudflareTunnel(

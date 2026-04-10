@@ -1,6 +1,8 @@
 interface TunnelAppConfig {
   tunnelsEndpoint: string;
   providersEndpoint: string;
+  zonesEndpoint: string;
+  hostnameValidationEndpoint: string;
 }
 
 const TUNNEL_APP_STYLES = `
@@ -563,10 +565,12 @@ const TUNNEL_APP_SCRIPT = String.raw`
 
   const state = {
     providers: [],
+    zones: [],
     tunnels: [],
     selectedId: null,
     selectedDetails: null,
     latestPairingSecret: null,
+    hostnameValidation: null,
     saving: false,
     testing: false,
     deleting: false,
@@ -579,6 +583,8 @@ const TUNNEL_APP_SCRIPT = String.raw`
     emptyState: document.getElementById("route-empty"),
     routeForm: document.getElementById("route-form"),
     notice: document.getElementById("route-notice"),
+    validationMeta: document.getElementById("route-validation-meta"),
+    validationPanel: document.getElementById("route-validation"),
     diagnosticsMeta: document.getElementById("route-diagnostics-meta"),
     diagnostics: document.getElementById("route-diagnostics"),
     pairingMeta: document.getElementById("route-pairing-meta"),
@@ -637,6 +643,13 @@ const TUNNEL_APP_SCRIPT = String.raw`
     const payload = await response.json();
     if (!response.ok) throw new Error(payload?.error || "Failed to load providers.");
     state.providers = payload.providers || [];
+  }
+
+  async function loadZones() {
+    const response = await fetch(config.zonesEndpoint, { method: "GET" });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload?.error || "Failed to load zones.");
+    state.zones = payload.zones || [];
   }
 
   async function loadTunnels(preferredId) {
@@ -704,10 +717,26 @@ const TUNNEL_APP_SCRIPT = String.raw`
     select.innerHTML = options.join("");
   }
 
+  function populateZoneSelect(selectedZoneId, suggestedZoneId) {
+    const select = ui.routeForm.elements.cloudflareZoneId;
+    const activeZoneId = selectedZoneId || suggestedZoneId || "";
+    const options = ['<option value="">Auto-match from hostname</option>'].concat(
+      state.zones.map((zone) =>
+        '<option value="' + escapeHtml(zone.id) + '"' + (zone.id === activeZoneId ? ' selected' : '') + '>' +
+        escapeHtml(zone.name + (zone.isDefault ? " · default" : "")) +
+        '</option>'
+      )
+    );
+    select.innerHTML = options.join("");
+  }
+
   function populateForm(entry) {
     populateProviderSelect(entry?.providerSettingId || "");
+    populateZoneSelect(
+      entry?.cloudflareZoneId || "",
+      state.hostnameValidation?.suggestedZoneId || "",
+    );
     ui.routeForm.elements.tunnelId.value = entry?.id || "";
-    ui.routeForm.elements.cloudflareZoneId.value = entry?.cloudflareZoneId || "";
     ui.routeForm.elements.publicHostname.value = entry?.publicHostname || "";
     ui.routeForm.elements.localServiceUrl.value = entry?.localServiceUrl || "http://localhost:11434";
     ui.routeForm.elements.tunnelName.value = entry?.cloudflareTunnelName || "";
@@ -772,6 +801,68 @@ const TUNNEL_APP_SCRIPT = String.raw`
     ).join("");
   }
 
+  function renderValidation() {
+    const validation = state.hostnameValidation;
+    if (!validation) {
+      ui.validationMeta.textContent = "Auto-match the zone from the hostname or pick one manually.";
+      ui.validationPanel.innerHTML = '<div class="empty-state"><strong>No hostname validation yet.</strong><div class="muted" style="margin-top:6px">Enter a hostname to discover the matching Cloudflare zone and catch DNS conflicts before provisioning.</div></div>';
+      return;
+    }
+
+    ui.validationMeta.textContent = validation.message;
+    const conflictMarkup = Array.isArray(validation.conflicts) && validation.conflicts.length
+      ? validation.conflicts.map((conflict) =>
+          '<div class="diagnostic-item">' +
+            '<strong>' + escapeHtml(conflict.type + " · " + conflict.name) + '</strong>' +
+            '<div>' + escapeHtml(conflict.content || "No record content") + '</div>' +
+            '<div class="muted" style="margin-top:6px">' + escapeHtml(conflict.proxied === null ? "proxied unknown" : conflict.proxied ? "proxied" : "dns only") + '</div>' +
+          '</div>'
+        ).join("")
+      : "";
+
+    ui.validationPanel.innerHTML =
+      '<div class="diagnostic-item"><strong>Matched zone</strong><div>' + escapeHtml(validation.zone?.name || "No matching zone") + '</div><div class="muted" style="margin-top:6px">' + escapeHtml(validation.matchedBy.replace(/-/g, " ")) + '</div></div>' +
+      '<div class="diagnostic-item"><strong>Suggested tunnel name</strong><div>' + escapeHtml(validation.suggestedTunnelName) + '</div><div class="muted" style="margin-top:6px">' + escapeHtml(validation.status.replace(/_/g, " ")) + '</div></div>' +
+      (conflictMarkup || '<div class="diagnostic-item"><strong>DNS conflicts</strong><div>None detected</div><div class="muted" style="margin-top:6px">The hostname is clear for provisioning in the matched zone.</div></div>');
+  }
+
+  async function runHostnameValidation() {
+    const publicHostname = ui.routeForm.elements.publicHostname.value.trim();
+    if (!publicHostname) {
+      state.hostnameValidation = null;
+      populateZoneSelect(ui.routeForm.elements.cloudflareZoneId.value || "", "");
+      renderValidation();
+      return;
+    }
+
+    const response = await fetch(config.hostnameValidationEndpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        publicHostname,
+        cloudflareZoneId: ui.routeForm.elements.cloudflareZoneId.value || null,
+        tunnelId: ui.routeForm.elements.tunnelId.value || null,
+      }),
+    });
+    const payload = await response.json();
+    if (!response.ok) {
+      throw new Error(payload?.error || "Hostname validation failed.");
+    }
+
+    state.hostnameValidation = payload.validation || null;
+    if (!ui.routeForm.elements.cloudflareZoneId.value && state.hostnameValidation?.suggestedZoneId) {
+      ui.routeForm.elements.cloudflareZoneId.value = state.hostnameValidation.suggestedZoneId;
+    }
+    if (!ui.routeForm.elements.tunnelName.value && state.hostnameValidation?.suggestedTunnelName) {
+      ui.routeForm.elements.tunnelName.value = state.hostnameValidation.suggestedTunnelName;
+    }
+    populateZoneSelect(
+      ui.routeForm.elements.cloudflareZoneId.value || "",
+      state.hostnameValidation?.suggestedZoneId || "",
+    );
+    renderValidation();
+  }
+
   function renderPairings(entry) {
     const details = state.selectedDetails;
     if (!entry || !details) {
@@ -823,15 +914,30 @@ const TUNNEL_APP_SCRIPT = String.raw`
   }
 
   async function refresh(preferredId) {
-    await Promise.all([loadProviders(), loadTunnels(preferredId)]);
+    await Promise.all([loadProviders(), loadTunnels(preferredId), loadZones()]);
     await loadTunnelDetails(state.selectedId);
     const entry = findSelected();
     if (!entry || state.latestPairingSecret?.tunnelId !== entry.id) {
       state.latestPairingSecret = null;
     }
+    state.hostnameValidation = null;
     renderStats();
     renderRouteList();
     populateForm(entry);
+    await runHostnameValidation().catch((error) => {
+      state.hostnameValidation = {
+        status: "invalid",
+        hostname: ui.routeForm.elements.publicHostname.value.trim(),
+        zone: null,
+        matchedBy: "none",
+        suggestedZoneId: null,
+        suggestedTunnelName: "",
+        conflicts: [],
+        existingTunnelRecordConflict: false,
+        message: error instanceof Error ? error.message : "Hostname validation failed.",
+      };
+      renderValidation();
+    });
     renderStepper(entry);
     renderDiagnostics(entry);
     renderPairings(entry);
@@ -964,6 +1070,20 @@ const TUNNEL_APP_SCRIPT = String.raw`
     }
     renderRouteList();
     populateForm(entry);
+    await runHostnameValidation().catch((error) => {
+      state.hostnameValidation = {
+        status: "invalid",
+        hostname: ui.routeForm.elements.publicHostname.value.trim(),
+        zone: null,
+        matchedBy: "none",
+        suggestedZoneId: null,
+        suggestedTunnelName: "",
+        conflicts: [],
+        existingTunnelRecordConflict: false,
+        message: error instanceof Error ? error.message : "Hostname validation failed.",
+      };
+      renderValidation();
+    });
     renderStepper(entry);
     renderDiagnostics(entry);
     renderPairings(entry);
@@ -974,11 +1094,23 @@ const TUNNEL_APP_SCRIPT = String.raw`
   ui.rotateButton.addEventListener("click", rotateToken);
   ui.pairButton.addEventListener("click", createPairing);
   ui.deleteButton.addEventListener("click", deleteRoute);
+  ui.routeForm.elements.publicHostname.addEventListener("blur", () => {
+    runHostnameValidation().catch((error) => {
+      setNotice(error instanceof Error ? error.message : "Hostname validation failed.", "error");
+    });
+  });
+  ui.routeForm.elements.cloudflareZoneId.addEventListener("change", () => {
+    runHostnameValidation().catch((error) => {
+      setNotice(error instanceof Error ? error.message : "Hostname validation failed.", "error");
+    });
+  });
   ui.resetButton.addEventListener("click", async () => {
     state.selectedId = null;
     state.selectedDetails = null;
     state.latestPairingSecret = null;
+    state.hostnameValidation = null;
     populateForm(null);
+    renderValidation();
     renderStepper(null);
     renderDiagnostics(null);
     renderPairings(null);
@@ -1144,8 +1276,8 @@ export function renderTunnelControlPlaneApp(config: TunnelAppConfig): string {
                       <select id="providerSettingId" name="providerSettingId"></select>
                     </div>
                     <div class="field">
-                      <label for="cloudflareZoneId">Cloudflare zone ID</label>
-                      <input id="cloudflareZoneId" name="cloudflareZoneId" placeholder="zone-id" />
+                      <label for="cloudflareZoneId">Cloudflare zone</label>
+                      <select id="cloudflareZoneId" name="cloudflareZoneId"></select>
                     </div>
                   </div>
 
@@ -1169,6 +1301,17 @@ export function renderTunnelControlPlaneApp(config: TunnelAppConfig): string {
                     <input id="accessProtected" name="accessProtected" type="checkbox" checked />
                     <span>Protect the route with Cloudflare Access service tokens</span>
                   </label>
+
+                  <div class="surface" style="padding:16px">
+                    <div class="eyebrow">Hostname validation</div>
+                    <div id="route-validation-meta" class="muted" style="margin-top:10px">Auto-match the zone from the hostname or pick one manually.</div>
+                    <div id="route-validation" class="diagnostic-list" style="margin-top:14px">
+                      <div class="empty-state">
+                        <strong>No hostname validation yet.</strong>
+                        <div class="muted" style="margin-top:6px">Enter a hostname to discover the matching Cloudflare zone and catch DNS conflicts before provisioning.</div>
+                      </div>
+                    </div>
+                  </div>
 
                   <div class="button-row">
                     <button id="reset-route" class="button secondary" type="button">New route</button>

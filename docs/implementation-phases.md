@@ -35,6 +35,11 @@ The goal of the next buildout is not to re-architect from scratch. It is to hard
   - `/api/pairings` plus `/api/pairings/:id/exchange` provide one-time pairing
     handoff for the connector
   - connector heartbeat now requires a scoped bearer token tied to the pairing
+- Phase 10 zone discovery and hostname validation is implemented:
+  - `/api/zones` exposes discovered Cloudflare zones from the control-plane token
+  - `/api/hostnames/validate` auto-matches hostnames to the best zone suffix
+  - the tunnel workspace now uses discovered zones instead of manual zone-ID-only input
+  - inline DNS conflict checks run before the operator provisions a route
 
 ## Execution Protocol
 

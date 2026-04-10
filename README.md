@@ -20,6 +20,8 @@ Cloudflare-native domain posture and remediation engine for the `hostingtool.dev
   `POST /api/tunnels/:id/rotate-token`, and
   `POST /api/tunnels/:id/heartbeat` for local-model tunnel orchestration,
   runtime testing, scoped connector pairing, and heartbeat status
+- `GET /api/zones` and `POST /api/hostnames/validate` for Cloudflare zone
+  discovery, suffix-based hostname matching, and DNS conflict preflight
 - `GET /api/session`, `POST /api/pairings`, and
   `POST /api/pairings/:id/exchange` for Access-authenticated operator session
   inspection plus one-time connector bootstrap exchange
@@ -64,6 +66,8 @@ Cloudflare-native domain posture and remediation engine for the `hostingtool.dev
   - persisted test status and result history for the app shell
 - Tunnel orchestration foundations with:
   - remotely managed Cloudflare Tunnel provisioning
+  - Cloudflare zone discovery from the operator API token
+  - suffix-based hostname matching and inline DNS conflict validation
   - proxied DNS CNAME management to `<tunnel-id>.cfargotunnel.com`
   - optional Access reusable policy, service token, and self-hosted app creation
   - Access-first app auth for `/app`, `/app/providers`, `/app/tunnels`, and

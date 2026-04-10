@@ -90,10 +90,12 @@ import {
 import {
   destroyTunnelResources,
   getCloudflareControlPlaneReadiness,
+  listCloudflareZones,
   normalizeTunnelSettingsInput,
   provisionTunnelResources,
   serializeTunnelRecord,
   testTunnelConnection,
+  validateTunnelHostname,
 } from "./lib/tunnels";
 import { renderProviderControlPlaneApp } from "./lib/app-shell";
 import { renderTunnelControlPlaneApp } from "./lib/tunnel-app-shell";
@@ -109,6 +111,7 @@ import type {
   ArtifactQueueMessage,
   DomainWatchRequestBody,
   ExportFormat,
+  HostnameValidationRequestBody,
   OperatorSession,
   PairingCreateRequestBody,
   PairingExchangeRequestBody,
@@ -217,6 +220,14 @@ function isOperatorControlPlaneRoute(request: Request, path: string): boolean {
   }
 
   if (path === "/api/pairings") {
+    return true;
+  }
+
+  if (request.method === "GET" && path === "/api/zones") {
+    return true;
+  }
+
+  if (request.method === "POST" && path === "/api/hostnames/validate") {
     return true;
   }
 
@@ -433,6 +444,8 @@ function handleTunnelControlPlaneApp(): Response {
     renderTunnelControlPlaneApp({
       tunnelsEndpoint: "/api/tunnels",
       providersEndpoint: "/api/settings/providers",
+      zonesEndpoint: "/api/zones",
+      hostnameValidationEndpoint: "/api/hostnames/validate",
     }),
     {
       headers: {
@@ -643,6 +656,76 @@ async function handleGetSession(session: OperatorSession): Promise<Response> {
   return jsonResponse({ session });
 }
 
+async function handleListZones(env: Env): Promise<Response> {
+  try {
+    const zones = await listCloudflareZones(env);
+    return jsonResponse({
+      zones,
+      defaultZoneId: env.CLOUDFLARE_ZONE_ID?.trim() || null,
+    });
+  } catch (error) {
+    return jsonResponse(
+      {
+        error:
+          error instanceof Error
+            ? error.message
+            : "Failed to load Cloudflare zones.",
+      },
+      { status: 502 },
+    );
+  }
+}
+
+async function handleValidateHostname(
+  request: Request,
+  env: Env,
+): Promise<Response> {
+  const body = (await request.json().catch(() => ({}))) as HostnameValidationRequestBody;
+  const publicHostname = body.publicHostname?.trim();
+  if (!publicHostname) {
+    return badRequest("publicHostname is required.");
+  }
+
+  const tunnel = body.tunnelId?.trim()
+    ? await getTunnelRecord(env, body.tunnelId.trim())
+    : null;
+
+  try {
+    const validation = await validateTunnelHostname(env, {
+      publicHostname,
+      cloudflareZoneId: body.cloudflareZoneId ?? null,
+      existingTunnelId: tunnel?.cloudflareTunnelId ?? null,
+    });
+    return jsonResponse({ validation });
+  } catch (error) {
+    return badRequest(
+      error instanceof Error ? error.message : "Hostname validation failed.",
+    );
+  }
+}
+
+async function hydrateTunnelZoneSelection(
+  env: Env,
+  body: TunnelSettingsRequestBody,
+  existing?: { cloudflareTunnelId: string | null } | null,
+): Promise<TunnelSettingsRequestBody> {
+  const requestedZoneId = body.cloudflareZoneId?.trim();
+  if (requestedZoneId || env.CLOUDFLARE_ZONE_ID?.trim() || !body.publicHostname?.trim()) {
+    return body;
+  }
+
+  const validation = await validateTunnelHostname(env, {
+    publicHostname: body.publicHostname,
+    cloudflareZoneId: null,
+    existingTunnelId: existing?.cloudflareTunnelId ?? null,
+  });
+
+  return {
+    ...body,
+    cloudflareZoneId: validation.suggestedZoneId,
+  };
+}
+
 async function handleListTunnels(env: Env): Promise<Response> {
   const tunnels = await listTunnelRecords(env);
   return jsonResponse({
@@ -674,7 +757,8 @@ async function handleCreateTunnel(
   }
 
   try {
-    const normalized = normalizeTunnelSettingsInput(body, env);
+    const hydratedBody = await hydrateTunnelZoneSelection(env, body);
+    const normalized = normalizeTunnelSettingsInput(hydratedBody, env);
 
     if (normalized.providerSettingId) {
       const provider = await getProviderSetting(env, normalized.providerSettingId);
@@ -743,7 +827,8 @@ async function handleUpdateTunnel(
   }
 
   try {
-    const normalized = normalizeTunnelSettingsInput(body, env, {
+    const hydratedBody = await hydrateTunnelZoneSelection(env, body, existing);
+    const normalized = normalizeTunnelSettingsInput(hydratedBody, env, {
       partial: true,
       existing,
     });
@@ -1539,6 +1624,14 @@ export default class EdgeIntelWorker extends WorkerEntrypoint<Env> {
 
     if (request.method === "GET" && path === "/api/session") {
       return handleGetSession(operatorSession as OperatorSession);
+    }
+
+    if (request.method === "GET" && path === "/api/zones") {
+      return handleListZones(this.env);
+    }
+
+    if (request.method === "POST" && path === "/api/hostnames/validate") {
+      return handleValidateHostname(request, this.env);
     }
 
     if (request.method === "POST" && path === "/api/scan") {

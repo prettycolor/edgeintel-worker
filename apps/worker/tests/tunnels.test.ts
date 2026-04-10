@@ -2,9 +2,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Env } from "../src/env";
 import {
   buildTunnelConnectorBootstrap,
+  listCloudflareZones,
   normalizeTunnelSettingsInput,
   provisionTunnelResources,
   testTunnelConnection,
+  validateTunnelHostname,
 } from "../src/lib/tunnels";
 import type { PersistedProviderSetting, PersistedTunnelRecord } from "../src/types";
 
@@ -284,5 +286,99 @@ describe("tunnel helpers", () => {
     const headers = (runtimeCall?.[1] as RequestInit).headers as Record<string, string>;
     expect(headers["CF-Access-Client-Id"]).toBe("client-id");
     expect(headers["CF-Access-Client-Secret"]).toBe("client-secret");
+  });
+
+  it("lists Cloudflare zones and marks the configured default zone", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL) => {
+        const parsed = new URL(typeof input === "string" ? input : input.toString());
+
+        if (parsed.pathname === "/client/v4/zones") {
+          return cfResponse([
+            {
+              id: "zone-123",
+              name: "example.com",
+              status: "active",
+              plan: { name: "Pro" },
+            },
+            {
+              id: "zone-456",
+              name: "demo.net",
+              status: "active",
+              plan: { name: "Free" },
+            },
+          ]);
+        }
+
+        throw new Error(`Unexpected fetch: ${parsed.pathname}`);
+      }),
+    );
+
+    const zones = await listCloudflareZones(createEnv());
+
+    expect(zones).toHaveLength(2);
+    expect(zones[0]).toMatchObject({
+      id: "zone-456",
+      name: "demo.net",
+      isDefault: false,
+    });
+    expect(zones[1]).toMatchObject({
+      id: "zone-123",
+      name: "example.com",
+      isDefault: true,
+    });
+  });
+
+  it("validates a hostname and reports conflicting DNS records", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL, init?: RequestInit) => {
+        const parsed = new URL(typeof input === "string" ? input : input.toString());
+
+        if (
+          parsed.pathname === "/client/v4/zones" &&
+          (init?.method ?? "GET") === "GET"
+        ) {
+          return cfResponse([
+            {
+              id: "zone-123",
+              name: "example.com",
+              status: "active",
+            },
+          ]);
+        }
+
+        if (
+          parsed.pathname === "/client/v4/zones/zone-123/dns_records" &&
+          (init?.method ?? "GET") === "GET"
+        ) {
+          return cfResponse([
+            {
+              id: "record-1",
+              name: "llm.example.com",
+              type: "CNAME",
+              content: "other-target.example.net",
+              proxied: true,
+            },
+          ]);
+        }
+
+        throw new Error(`Unexpected fetch: ${parsed.pathname}`);
+      }),
+    );
+
+    const result = await validateTunnelHostname(createEnv(), {
+      publicHostname: "llm.example.com",
+      existingTunnelId: "cf-tunnel-1",
+    });
+
+    expect(result.status).toBe("warning");
+    expect(result.zone?.id).toBe("zone-123");
+    expect(result.matchedBy).toBe("suffix-match");
+    expect(result.conflicts[0]).toMatchObject({
+      type: "CNAME",
+      content: "other-target.example.net",
+    });
   });
 });

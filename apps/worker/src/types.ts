@@ -39,6 +39,7 @@ export type TunnelConnectorStatus =
 export type TunnelTestStatus = "passed" | "failed" | "warning";
 export type PairingSessionStatus = "pending" | "active" | "revoked" | "expired";
 export type OperatorSessionMode = "access" | "dev-bypass";
+export type HostnameValidationStatus = "valid" | "warning" | "invalid";
 
 export interface ScanRequestBody {
   domain?: string;
@@ -128,6 +129,12 @@ export interface PairingExchangeRequestBody {
   connectorName?: string | null;
   connectorVersion?: string | null;
   note?: string | null;
+}
+
+export interface HostnameValidationRequestBody {
+  publicHostname?: string;
+  cloudflareZoneId?: string | null;
+  tunnelId?: string | null;
 }
 
 export interface ScanTarget {
@@ -540,4 +547,34 @@ export interface ConnectorSessionView {
   pairingId: string;
   token: string;
   expiresAt: string;
+}
+
+export interface CloudflareZoneView {
+  id: string;
+  name: string;
+  status: string | null;
+  paused: boolean;
+  planName: string | null;
+  accountName: string | null;
+  isDefault: boolean;
+}
+
+export interface HostnameConflictView {
+  id: string | null;
+  type: string;
+  name: string;
+  content: string | null;
+  proxied: boolean | null;
+}
+
+export interface HostnameValidationResult {
+  status: HostnameValidationStatus;
+  hostname: string;
+  zone: CloudflareZoneView | null;
+  matchedBy: "provided-zone" | "suffix-match" | "default-zone" | "none";
+  suggestedZoneId: string | null;
+  suggestedTunnelName: string;
+  conflicts: HostnameConflictView[];
+  existingTunnelRecordConflict: boolean;
+  message: string;
 }
