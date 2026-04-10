@@ -6,7 +6,8 @@ hosts the model.
 
 This package contains the current reference runtime:
 
-- `src/edgeintel-connector.mjs`
+- `src/index.ts` shared pairing/probe/heartbeat helpers
+- `src/edgeintel-connector.ts` CLI entrypoint
 
 It is intentionally simple:
 
@@ -47,10 +48,10 @@ That will:
 To run continuously:
 
 ```bash
-node packages/connector-core/src/edgeintel-connector.mjs
+npx tsx packages/connector-core/src/edgeintel-connector.ts
 ```
 
 ## Packaging Direction
 
-This script is not the final UX. It is the reference runtime that the desktop
-connector app will absorb in later phases.
+This script is no longer the only local connector path. It now shares its core
+logic with the macOS desktop app so the CLI and packaged connector stay aligned.

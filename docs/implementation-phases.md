@@ -45,6 +45,12 @@ The goal of the next buildout is not to re-architect from scratch. It is to hard
   - `/api/tunnels/:id/observability` exposes recent tests, last-known-good, version drift, and failure deltas
   - tunnel actions now emit stored events instead of only mutating the latest row state
   - the tunnel workspace surfaces event history and regression context inline
+- Phase 12 macOS desktop connector is implemented:
+  - `apps/desktop-connector` now ships a real pairing and runtime workspace instead of demo copy
+  - the app stores local connector secrets with Electron `safeStorage`
+  - `cloudflared` can be detected from the machine or installed into an app-managed path from the official Cloudflare release feed
+  - desktop runtime controls now supervise `cloudflared`, probe the local service, and send connector heartbeats back to EdgeIntel
+  - desktop tests and packaging smoke checks now gate the phase alongside the repo-wide verification flow
 
 ## Execution Protocol
 

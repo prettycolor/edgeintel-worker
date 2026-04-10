@@ -9,10 +9,14 @@
     "dev": "electron-forge start",
     "package": "electron-forge package",
     "build": "electron-forge make",
-    "typecheck": "npx tsc --noEmit"
+    "typecheck": "npx tsc --noEmit",
+    "test": "vitest run"
   },
   "dependencies": {
-    "@edgeintel/shared-contracts": "*"
+    "@edgeintel/connector-core": "*",
+    "@edgeintel/shared-contracts": "*",
+    "electron-store": "^8.2.0",
+    "electron-updater": "^6.8.3"
   },
   "devDependencies": {
     "@electron-forge/cli": "^7.11.1",
@@ -22,6 +26,7 @@
     "@electron-forge/plugin-vite": "^7.11.1",
     "@electron-forge/shared-types": "^7.11.1",
     "electron": "^39.0.0",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4"
   }
 }

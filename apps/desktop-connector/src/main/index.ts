@@ -1,8 +1,13 @@
 import { app, BrowserWindow } from "electron";
-import { createMainWindow } from "./window";
-import { createTray, destroyTray } from "./tray";
+import { ConnectorService } from "./connector-service";
+import { registerIpcHandlers } from "./ipc";
+import { initAutoUpdater } from "./updater";
+import { createMainWindow, markAppQuitting } from "./window";
+import { createTray, destroyTray, updateTraySnapshot } from "./tray";
 
 let mainWindow: BrowserWindow | null = null;
+let service: ConnectorService | null = null;
+let ipcRegistered = false;
 
 const gotLock = app.requestSingleInstanceLock();
 
@@ -18,7 +23,19 @@ if (!gotLock) {
 
   app.on("ready", () => {
     mainWindow = createMainWindow();
+    service = new ConnectorService();
+    if (!ipcRegistered) {
+      registerIpcHandlers(mainWindow, service);
+      ipcRegistered = true;
+    }
+    service.on("snapshot", (snapshot) => {
+      updateTraySnapshot(snapshot);
+    });
     createTray(mainWindow);
+    initAutoUpdater((entry) => {
+      service?.logExternal(entry);
+    });
+    void service.initialize();
   });
 
   app.on("activate", () => {
@@ -36,6 +53,7 @@ if (!gotLock) {
   });
 
   app.on("before-quit", () => {
+    markAppQuitting();
     destroyTray();
   });
 }

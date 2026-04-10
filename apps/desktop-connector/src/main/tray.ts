@@ -1,6 +1,8 @@
+import type { DesktopConnectorSnapshot } from "@edgeintel/shared-contracts";
 import { BrowserWindow, Menu, Tray, app, nativeImage } from "electron";
 
 let tray: Tray | null = null;
+let currentSnapshot: DesktopConnectorSnapshot | null = null;
 
 export function createTray(mainWindow: BrowserWindow) {
   const icon = nativeImage.createFromDataURL(
@@ -14,26 +16,51 @@ export function createTray(mainWindow: BrowserWindow) {
   tray = new Tray(icon);
   tray.setToolTip("EdgeIntel Connector");
 
-  tray.setContextMenu(
-    Menu.buildFromTemplate([
-      {
-        label: "Open EdgeIntel Connector",
-        click: () => {
-          mainWindow.show();
-          mainWindow.focus();
-        },
-      },
-      {
-        label: "Quit EdgeIntel Connector",
-        click: () => app.quit(),
-      },
-    ]),
-  );
+  updateMenu(mainWindow);
 
   tray.on("click", () => {
     mainWindow.show();
     mainWindow.focus();
   });
+}
+
+function updateMenu(mainWindow: BrowserWindow) {
+  if (!tray) return;
+
+  const runtimeRunning = currentSnapshot?.runtime.status === "running" || currentSnapshot?.runtime.status === "degraded";
+  const contextMenu = Menu.buildFromTemplate([
+    {
+      label: "Open EdgeIntel Connector",
+      click: () => {
+        mainWindow.show();
+        mainWindow.focus();
+      },
+    },
+    {
+      label: runtimeRunning ? "Tunnel Running" : "Tunnel Idle",
+      enabled: false,
+    },
+    { type: "separator" },
+    {
+      label: "Quit EdgeIntel Connector",
+      click: () => app.quit(),
+    },
+  ]);
+
+  tray.setContextMenu(contextMenu);
+  const hostname = currentSnapshot?.publicHostname;
+  const lifecycle = currentSnapshot?.lifecycle ?? "unconfigured";
+  tray.setToolTip(
+    hostname ? `EdgeIntel Connector · ${hostname} · ${lifecycle}` : `EdgeIntel Connector · ${lifecycle}`,
+  );
+}
+
+export function updateTraySnapshot(snapshot: DesktopConnectorSnapshot) {
+  currentSnapshot = snapshot;
+  const focusedWindow = BrowserWindow.getAllWindows()[0];
+  if (focusedWindow) {
+    updateMenu(focusedWindow);
+  }
 }
 
 export function destroyTray() {

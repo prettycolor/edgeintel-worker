@@ -20,7 +20,7 @@
     "deploy:dry-run": "npm run deploy:dry-run --workspace @edgeintel/worker",
     "typecheck": "npm run typecheck --workspace @edgeintel/worker && npm run typecheck --workspace @edgeintel/shared-contracts && npm run typecheck --workspace @edgeintel/connector-core && npm run typecheck --workspace @edgeintel/control-plane-web && npm run typecheck --workspace @edgeintel/desktop-connector",
     "test": "npm run test --workspace @edgeintel/worker",
-    "verify": "npm run verify --workspace @edgeintel/worker && npm run build --workspace @edgeintel/control-plane-web && npm run typecheck --workspace @edgeintel/desktop-connector && npm run typecheck --workspace @edgeintel/shared-contracts && npm run typecheck --workspace @edgeintel/connector-core",
+    "verify": "npm run verify --workspace @edgeintel/worker && npm run build --workspace @edgeintel/control-plane-web && npm run typecheck --workspace @edgeintel/desktop-connector && npm run test --workspace @edgeintel/desktop-connector && npm run typecheck --workspace @edgeintel/shared-contracts && npm run typecheck --workspace @edgeintel/connector-core",
     "validate:install": "npm run validate:install --workspace @edgeintel/worker",
     "cf:types": "npm run cf:types --workspace @edgeintel/worker",
     "cf:types:check": "npm run cf:types:check --workspace @edgeintel/worker",

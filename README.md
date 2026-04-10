@@ -93,7 +93,7 @@ Cloudflare-native domain posture and remediation engine for the `hostingtool.dev
 - `apps/control-plane-web`
   React operator workspace scaffold that will replace the long-term HTML-string app shell
 - `apps/desktop-connector`
-  Electron macOS tray/window scaffold for local pairing, `cloudflared`, and diagnostics
+  Electron macOS tray/window app for local pairing, `cloudflared` install and supervision, and machine-side diagnostics
 - `packages/shared-contracts`
   Shared TypeScript contracts for operator surfaces and future connector/worker interop
 - `packages/connector-core`
@@ -207,6 +207,15 @@ Phase 8 now adds:
 - `apps/control-plane-web` as the React operator workspace foundation
 - `apps/desktop-connector` as the Electron macOS tray/window scaffold
 - `packages/shared-contracts` for shared app and connector types
+
+Phase 12 now adds:
+
+- a real macOS desktop connector flow instead of a placeholder scaffold
+- encrypted local connector state via Electron `safeStorage`
+- one-time pairing exchange inside the app
+- managed `cloudflared` detection plus official GitHub-release install with checksum verification
+- runtime supervision, local service probing, and heartbeat reporting without CLI use
+- tray-aware diagnostics and a desktop setup workspace for pairing, install, test, start, and stop
 
 ## Current Scope
 

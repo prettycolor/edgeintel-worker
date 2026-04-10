@@ -14,6 +14,28 @@ export type TunnelConnectorStatus =
   | "degraded"
   | "offline";
 export type TunnelTestStatus = "passed" | "failed" | "warning";
+export type PairingSessionStatus = "pending" | "active" | "revoked" | "expired";
+export type DesktopConnectorLifecycle =
+  | "unconfigured"
+  | "pairing"
+  | "paired"
+  | "ready"
+  | "installing_cloudflared"
+  | "starting"
+  | "running"
+  | "stopping"
+  | "error";
+export type DesktopCloudflaredStatus = "missing" | "ready" | "installing" | "error";
+export type DesktopRuntimeStatus = "stopped" | "running" | "degraded" | "error";
+export type DesktopLogLevel = "info" | "warning" | "error";
+export type DesktopLogScope =
+  | "app"
+  | "pairing"
+  | "cloudflared"
+  | "runtime"
+  | "heartbeat"
+  | "local-probe"
+  | "updater";
 
 export interface ProviderConnectionTestResult {
   status: ProviderTestStatus;
@@ -104,9 +126,195 @@ export interface OperatorSessionView {
   groups: string[];
 }
 
+export interface PairingSessionView {
+  id: string;
+  tunnelId: string;
+  issuedBySubject: string;
+  issuedByEmail: string | null;
+  status: PairingSessionStatus;
+  connectorName: string | null;
+  connectorVersion: string | null;
+  exchangeCount: number;
+  issuedAt: string;
+  expiresAt: string;
+  exchangedAt: string | null;
+  connectorExpiresAt: string | null;
+  lastSeenAt: string | null;
+  revokedAt: string | null;
+  expiredAt: string | null;
+  metadata: Record<string, unknown>;
+}
+
+export interface PairingSecretView {
+  pairingId: string;
+  pairingToken: string;
+  tunnelId: string;
+  publicHostname: string;
+  apiBase: string;
+  exchangeEndpoint: string;
+  expiresAt: string;
+  instructions: string[];
+}
+
+export interface ConnectorSessionView {
+  type: "bearer";
+  pairingId: string;
+  token: string;
+  expiresAt: string;
+}
+
+export interface CloudflareZoneView {
+  id: string;
+  name: string;
+  status: string | null;
+  paused: boolean;
+  planName: string | null;
+  accountName: string | null;
+  isDefault: boolean;
+}
+
+export interface HostnameConflictView {
+  id: string | null;
+  type: string;
+  name: string;
+  content: string | null;
+  proxied: boolean | null;
+}
+
+export interface HostnameValidationResult {
+  status: "valid" | "warning" | "invalid";
+  hostname: string;
+  zone: CloudflareZoneView | null;
+  matchedBy: "provided-zone" | "suffix-match" | "default-zone" | "none";
+  suggestedZoneId: string | null;
+  suggestedTunnelName: string;
+  conflicts: HostnameConflictView[];
+  existingTunnelRecordConflict: boolean;
+  message: string;
+}
+
 export interface ControlPlaneHealthSnapshot {
   workerPackage: string;
   workspaceMode: "monorepo";
   providerRouteCount: number;
   tunnelRouteCount: number;
 }
+
+export interface PairingExchangeResponse {
+  pairing: PairingSessionView;
+  tunnel: TunnelRecordView;
+  bootstrap: TunnelBootstrapPayload;
+  connectorSession: ConnectorSessionView;
+}
+
+export interface DesktopConnectorSettingsInput {
+  apiBase: string;
+  pairingId: string;
+  pairingToken: string;
+  connectorName: string;
+  autoLaunchOnLogin: boolean;
+}
+
+export interface DesktopCloudflaredState {
+  status: DesktopCloudflaredStatus;
+  binaryPath: string | null;
+  version: string | null;
+  source: "managed" | "system" | "homebrew" | null;
+  releaseTag: string | null;
+  assetName: string | null;
+  checksumVerified: boolean;
+  message: string | null;
+  lastCheckedAt: string | null;
+}
+
+export interface DesktopLocalProbeState {
+  url: string | null;
+  reachable: boolean | null;
+  status: number | null;
+  latencyMs: number | null;
+  error: string | null;
+  testedAt: string | null;
+}
+
+export interface DesktopTunnelBootstrapView {
+  publicHostname: string | null;
+  localServiceUrl: string | null;
+  cloudflareTunnelId: string | null;
+  cloudflareTunnelName: string | null;
+  tunnelTokenPresent: boolean;
+  accessHeadersPresent: boolean;
+  notes: string[];
+  command: string | null;
+  launchArgs: string[] | null;
+  connectorTokenExpiresAt: string | null;
+}
+
+export interface DesktopConnectorRuntimeState {
+  status: DesktopRuntimeStatus;
+  cloudflaredPid: number | null;
+  startedAt: string | null;
+  stoppedAt: string | null;
+  lastHeartbeatAt: string | null;
+  lastHeartbeatNote: string | null;
+}
+
+export interface DesktopConnectorLogEntry {
+  id: string;
+  timestamp: string;
+  level: DesktopLogLevel;
+  scope: DesktopLogScope;
+  message: string;
+  detail: string | null;
+}
+
+export interface DesktopConnectorSnapshot {
+  lifecycle: DesktopConnectorLifecycle;
+  connectorName: string;
+  platform: string;
+  appVersion: string;
+  apiBase: string | null;
+  pairingId: string | null;
+  pairedAt: string | null;
+  autoLaunchOnLogin: boolean;
+  publicHostname: string | null;
+  pairing: PairingSessionView | null;
+  bootstrap: DesktopTunnelBootstrapView | null;
+  cloudflared: DesktopCloudflaredState;
+  localProbe: DesktopLocalProbeState;
+  runtime: DesktopConnectorRuntimeState;
+  lastError: string | null;
+  logs: DesktopConnectorLogEntry[];
+}
+
+export interface DesktopPairingResult {
+  snapshot: DesktopConnectorSnapshot;
+  pairing: PairingSessionView;
+  bootstrap: DesktopTunnelBootstrapView;
+  connectorSessionExpiresAt: string | null;
+}
+
+export interface DesktopActionResult {
+  snapshot: DesktopConnectorSnapshot;
+}
+
+export interface DesktopConnectorEventPayload {
+  snapshot: DesktopConnectorSnapshot;
+}
+
+export interface DesktopConnectorLogEventPayload {
+  entry: DesktopConnectorLogEntry;
+}
+
+export const EDGEINTEL_DESKTOP_IPC = {
+  getSnapshot: "edgeintel-desktop:get-snapshot",
+  pairConnector: "edgeintel-desktop:pair-connector",
+  refreshCloudflared: "edgeintel-desktop:refresh-cloudflared",
+  installCloudflared: "edgeintel-desktop:install-cloudflared",
+  testLocalService: "edgeintel-desktop:test-local-service",
+  startRuntime: "edgeintel-desktop:start-runtime",
+  stopRuntime: "edgeintel-desktop:stop-runtime",
+  updatePreferences: "edgeintel-desktop:update-preferences",
+  resetConfiguration: "edgeintel-desktop:reset-configuration",
+  onSnapshot: "edgeintel-desktop:on-snapshot",
+  onLog: "edgeintel-desktop:on-log",
+} as const;
