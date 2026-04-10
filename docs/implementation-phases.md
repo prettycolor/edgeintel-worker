@@ -19,9 +19,14 @@ The goal of the next buildout is not to re-architect from scratch. It is to hard
   - proxied DNS route management
   - optional Access policy, token, and app creation
   - tunnel runtime testing and bootstrap rotation
-- Phase 7D reference connector runtime is implemented in `connector/`.
+- Phase 7D reference connector runtime is implemented and now lives in `packages/connector-core/`.
 - Phase 7E local-model tunnel workspace is implemented at `/app/tunnels`.
 - Remaining Phase 7 work is now primarily packaging, visual polish, and deeper connector UX rather than missing control-plane fundamentals.
+- Phase 8 monorepo uplift is implemented:
+  - `apps/worker` is now the canonical Worker package
+  - `apps/control-plane-web` provides the React control-plane foundation
+  - `apps/desktop-connector` provides the Electron macOS tray/window scaffold
+  - root scripts proxy the existing Worker commands from the repo root
 
 ## Execution Protocol
 

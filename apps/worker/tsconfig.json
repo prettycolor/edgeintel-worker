@@ -1,0 +1,9 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "lib": ["ES2022", "WebWorker"],
+    "types": ["node", "vitest/globals"]
+  },
+  "include": ["worker-configuration.d.ts", "src/**/*.ts", "tests/**/*.ts"]
+}

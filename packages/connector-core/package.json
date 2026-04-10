@@ -1,0 +1,11 @@
+{
+  "name": "@edgeintel/connector-core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "once": "node src/edgeintel-connector.mjs --once",
+    "dry-run": "node src/edgeintel-connector.mjs --dry-run",
+    "typecheck": "node --check src/edgeintel-connector.mjs"
+  }
+}

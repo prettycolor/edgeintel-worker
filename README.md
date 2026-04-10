@@ -1,4 +1,4 @@
-# EdgeIntel Worker
+# EdgeIntel
 
 Cloudflare-native domain posture and remediation engine for the `hostingtool.dev` / `hostinginfo.gg` environment.
 
@@ -20,8 +20,8 @@ Cloudflare-native domain posture and remediation engine for the `hostingtool.dev
   `POST /api/tunnels/:id/rotate-token`, and
   `POST /api/tunnels/:id/heartbeat` for local-model tunnel orchestration,
   runtime testing, connector bootstrap, and heartbeat status
-- `GET /app` and `GET /app/providers` for the Worker-served provider control-plane UI
-- `GET /app/tunnels` for the Worker-served tunnel and local-model wizard workspace
+- `GET /app` and `GET /app/providers` for the current Worker-served provider control-plane UI
+- `GET /app/tunnels` for the current Worker-served tunnel and local-model wizard workspace
 - `POST /api/scans/:scanRunId/ai-brief` to generate an evidence-bounded AI
   brief from persisted findings and recommendations
 - Durable Object job coordination with job snapshots and event streaming
@@ -73,16 +73,16 @@ Cloudflare-native domain posture and remediation engine for the `hostingtool.dev
 
 ## Layout
 
-- `src/index.ts`
-  Worker entrypoint and HTTP API
-- `src/durable-objects/job-coordinator.ts`
-  Per-job state and event history
-- `src/workflows/scan-workflow.ts`
-  Durable orchestration and queue fan-out
-- `src/lib/`
-  scanning, findings, recommendations, artifacts, persistence, exports
-- `migrations/0001_initial.sql`
-  D1 schema
+- `apps/worker`
+  Cloudflare Worker runtime, D1 migrations, queues, workflows, tests, and current app-shell endpoints
+- `apps/control-plane-web`
+  React operator workspace scaffold that will replace the long-term HTML-string app shell
+- `apps/desktop-connector`
+  Electron macOS tray/window scaffold for local pairing, `cloudflared`, and diagnostics
+- `packages/shared-contracts`
+  Shared TypeScript contracts for operator surfaces and future connector/worker interop
+- `packages/connector-core`
+  Current reference runtime for tunnel bootstrap, local probing, and heartbeat reporting
 
 ## Setup
 
@@ -93,13 +93,14 @@ npm run bootstrap
 npm run dev
 ```
 
-The bootstrap flow will:
+The bootstrap flow targets `apps/worker` and will:
 
 - require Node 24.x from [`.nvmrc`](./.nvmrc)
-- install dependencies if needed
-- generate Wrangler-backed runtime types
-- create a local `.dev.vars` from the example if missing
-- apply local D1 migrations into Wrangler local state
+- install workspace dependencies if needed
+- generate Wrangler-backed runtime types for the Worker package
+- copy the existing repo-root `.dev.vars` into `apps/worker/.dev.vars` if present
+- create `apps/worker/.dev.vars` from the example if missing
+- apply local D1 migrations into the Worker's Wrangler local state
 
 Useful follow-up commands:
 
@@ -118,6 +119,9 @@ marketing website.
 - The Worker runtime and control plane live on Cloudflare.
 - The operator UX is intended to be an authenticated app shell served by the
   EdgeIntel stack itself.
+- The monorepo now contains a React control-plane workspace and a macOS desktop
+  connector scaffold so the next-wave buildout can happen without stretching the
+  Worker package into a single giant app.
 - The current UI direction is documented in
   [docs/mockups/README.md](./docs/mockups/README.md).
 
@@ -163,9 +167,17 @@ Phase 7C through 7E now add:
 
 - `/api/tunnels` orchestration
 - `/app/tunnels` local-model wizard UI
-- the reference connector in [`connector/`](./connector/README.md)
+- the reference connector in [`packages/connector-core`](./packages/connector-core/README.md)
 - a route quickstart in
   [docs/local-model-route-quickstart.md](./docs/local-model-route-quickstart.md)
+
+Phase 8 now adds:
+
+- npm workspace packaging
+- `apps/worker` as the canonical Worker package
+- `apps/control-plane-web` as the React operator workspace foundation
+- `apps/desktop-connector` as the Electron macOS tray/window scaffold
+- `packages/shared-contracts` for shared app and connector types
 
 ## Current Scope
 
@@ -196,3 +208,6 @@ For the local-model setup flow, start with
 and [connector/README.md](./connector/README.md).
 
 UI direction prototypes for Phase 7 live in [docs/mockups/README.md](./docs/mockups/README.md).
+
+The repo wiki Home page is now available in the GitHub wiki and should become
+the canonical operator/setup guide as later phases land.

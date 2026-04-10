@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cd "$ROOT_DIR"
+WORKSPACE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$WORKSPACE_DIR"
 
 TMP_DIR=".wrangler/tmp"
 TMP_FILE="$TMP_DIR/worker-configuration.check.d.ts"
@@ -44,7 +44,7 @@ ACTUAL_NORMALIZED="$(normalize_types "$TMP_FILE")"
 
 if [[ "$EXPECTED_NORMALIZED" != "$ACTUAL_NORMALIZED" ]]; then
   echo "[types-check] worker-configuration.d.ts is out of date."
-  echo "[types-check] Run npm run cf:types and commit the regenerated file."
+  echo "[types-check] Run npm run cf:types --workspace @edgeintel/worker and commit the regenerated file."
   diff -u \
     <(printf '%s' "$EXPECTED_NORMALIZED") \
     <(printf '%s' "$ACTUAL_NORMALIZED") || true

@@ -1,7 +1,13 @@
 node_modules/
 .wrangler/
 .dev.vars
+apps/worker/.dev.vars
+apps/worker/.wrangler/
 .env
 .DS_Store
 dist/
 coverage/
+apps/control-plane-web/dist/
+apps/desktop-connector/out/
+apps/desktop-connector/.vite/
+apps/desktop-connector/src/renderer/.vite/
