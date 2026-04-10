@@ -171,7 +171,11 @@ AI Gateway is optional in this initial slice. The scaffold reserves:
 
 - `AI_GATEWAY_ID`
 - `AI_GATEWAY_BASE_URL`
+- `AI_GATEWAY_MODEL`
+- `AI_GATEWAY_PROVIDER`
 - `AI_GATEWAY_TOKEN`
+- `AI_UPSTREAM_API_KEY`
+- `AI_INFERENCE_DEFAULT_ROUTE`
 
 Cloudflare Access is required for the control-plane surfaces in the current
 phase. Configure:
@@ -186,10 +190,6 @@ For localhost-only development, you can opt into a deliberate bypass with:
 Local-model connector onboarding now uses one-time pairings rather than direct
 tunnel bootstrap fetches. The current quick start is in
 [docs/local-model-route-quickstart.md](./docs/local-model-route-quickstart.md).
-- `AI_GATEWAY_MODEL`
-- `AI_GATEWAY_PROVIDER`
-- `AI_UPSTREAM_API_KEY`
-- `AI_INFERENCE_DEFAULT_ROUTE`
 
 If you use `AI_GATEWAY_BASE_URL`, set it to the HTTPS provider or route base that
 EdgeIntel should call before `/chat/completions`, not just a generic account URL.
@@ -258,6 +258,15 @@ Phase 15 now adds:
 - the architecture narrative in [docs/architecture-story.md](./docs/architecture-story.md)
 - the final visual QA checklist in [docs/visual-qa-checklist.md](./docs/visual-qa-checklist.md)
 
+Release-layer docs now add:
+
+- deployment runbook in [docs/deploy-to-cloudflare.md](./docs/deploy-to-cloudflare.md)
+- operator usage guide in [docs/operator-quickstart.md](./docs/operator-quickstart.md)
+- release checklist in [docs/release-checklist.md](./docs/release-checklist.md)
+- MCP evaluation in [docs/mcp-server-evaluation.md](./docs/mcp-server-evaluation.md)
+- maintenance and security roadmap in
+  [docs/maintenance-and-security-roadmap.md](./docs/maintenance-and-security-roadmap.md)
+
 ## Current Scope
 
 This is the phase-0/1 implementation slice:
@@ -294,6 +303,14 @@ Interview/demo assets now live in:
 - [docs/demo-domain-set.md](./docs/demo-domain-set.md)
 - [docs/architecture-story.md](./docs/architecture-story.md)
 - [docs/visual-qa-checklist.md](./docs/visual-qa-checklist.md)
+
+Release/operator docs now live in:
+
+- [docs/deploy-to-cloudflare.md](./docs/deploy-to-cloudflare.md)
+- [docs/operator-quickstart.md](./docs/operator-quickstart.md)
+- [docs/release-checklist.md](./docs/release-checklist.md)
+- [docs/mcp-server-evaluation.md](./docs/mcp-server-evaluation.md)
+- [docs/maintenance-and-security-roadmap.md](./docs/maintenance-and-security-roadmap.md)
 
 The repo wiki Home page is now available in the GitHub wiki and should become
 the canonical operator/setup guide as later phases land.

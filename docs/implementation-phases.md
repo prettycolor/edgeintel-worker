@@ -66,6 +66,16 @@ The goal of the next buildout is not to re-architect from scratch. It is to hard
   - the repo now includes a canonical demo script, demo domain set, architecture story, and visual QA checklist
   - the React operator-shell scaffold now reflects the completed control-plane and commercial-output story
   - the remaining work is now release packaging and future expansions rather than missing core product layers
+- The release layer is now in progress:
+  - deploy runbook for a signed-in Cloudflare account
+  - operator quickstart for the current app and API surfaces
+  - public repo release checklist
+  - MCP server evaluation and future phase definition
+  - maintenance and security roadmap
+  - CI plus Dependabot for baseline repo upkeep
+
+Public package publishing remains intentionally deferred until the final release
+pass.
 
 ## Execution Protocol
 

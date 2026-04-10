@@ -13,6 +13,21 @@ control plane that can:
 - manage hosted and self-hosted AI provider routes
 - orchestrate Cloudflare Tunnel plus Access for local model exposure
 
+## Demo Prep
+
+Do this before the meeting:
+
+- choose the demo domains from
+  [`docs/demo-domain-set.md`](/Users/b.rad/Documents/GitHub/edgeintel-worker/docs/demo-domain-set.md)
+- confirm the same domains still behave the way you expect on the day of the
+  demo
+- make sure at least one provider connection test is already green
+- make sure the local-model tunnel path is already provisioned if you plan to
+  show it
+- pre-run one scan so you have a stable example if live internet conditions get
+  noisy
+- keep one live scan ready for the "real platform" story
+
 ## Best Demo Sequence
 
 1. Start with the architecture in one sentence.
@@ -32,6 +47,16 @@ control plane that can:
 
 6. Generate an export.
    Show that the same persisted scan context feeds the operator, commercial, and implementation outputs.
+
+## Recommended Narrative
+
+Use this progression:
+
+1. infrastructure evidence
+2. Cloudflare-native control plane
+3. commercial motion
+4. local-model and connector differentiation
+5. future MCP and AI workflow extensibility
 
 ## Suggested Live Commands
 
@@ -83,3 +108,5 @@ curl -X POST http://127.0.0.1:8787/api/exports/<scan-run-id> \
 - If you use a prospect or third-party domain, verify it on the same day because posture can change.
 - Never describe EdgeIntel as a vulnerability scanner.
 - Keep the Tunnel and local-model path framed as optional but distinctive.
+- If the UI is not yet driving a specific flow, use the API directly and say so
+  plainly.
