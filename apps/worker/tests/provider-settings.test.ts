@@ -181,4 +181,15 @@ describe("provider settings helpers", () => {
     expect(result.transport).toBe("workers-ai-binding");
     expect(run).toHaveBeenCalledTimes(1);
   });
+
+  it("rejects unsupported auth strategies for a provider preset", () => {
+    expect(() =>
+      normalizeProviderSettingsInput({
+        kind: "hosted-api-key",
+        providerCode: "openai",
+        displayName: "OpenAI",
+        authStrategy: "oauth",
+      }),
+    ).toThrow("OpenAI does not support authStrategy=oauth.");
+  });
 });

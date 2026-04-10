@@ -104,6 +104,18 @@ describe("tunnel helpers", () => {
     expect(normalized.tunnelName).toContain("edgeintel-llm-example-com");
   });
 
+  it("rejects local service URLs with embedded credentials", () => {
+    expect(() =>
+      normalizeTunnelSettingsInput(
+        {
+          publicHostname: "llm.example.com",
+          localServiceUrl: "http://user:secret@localhost:11434",
+        },
+        createEnv(),
+      ),
+    ).toThrow("localServiceUrl must not embed credentials in the URL.");
+  });
+
   it("builds a connector bootstrap payload with tunnel and Access secrets", () => {
     const bootstrap = buildTunnelConnectorBootstrap(tunnelRecord, {
       tunnelToken: "secret-token",

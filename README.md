@@ -37,6 +37,9 @@ Cloudflare-native domain posture and remediation engine for the `hostingtool.dev
 - `GET /app/tunnels` for the current Worker-served tunnel and local-model wizard workspace
 - `POST /api/scans/:scanRunId/ai-brief` to generate an evidence-bounded AI
   brief from persisted findings and recommendations
+- private-by-default route auth across `/app*` and `/api/*`, with only
+  `/health`, `/api/pairings/:id/exchange`, and
+  `/api/tunnels/:id/heartbeat` intentionally left outside the operator session gate
 - Durable Object job coordination with job snapshots and event streaming
 - Workflow-driven orchestration that fans out stateless scan work through Cloudflare Queues
 - Scheduled watch processing through an hourly cron trigger
@@ -312,6 +315,10 @@ Release/operator docs now live in:
 - [docs/mcp-server-evaluation.md](./docs/mcp-server-evaluation.md)
 - [docs/maintenance-and-security-roadmap.md](./docs/maintenance-and-security-roadmap.md)
 - [docs/phase-16-security-plan.md](./docs/phase-16-security-plan.md)
+- [docs/edgeintel-worker-threat-model.md](./docs/edgeintel-worker-threat-model.md)
+- [docs/security-test-matrix.md](./docs/security-test-matrix.md)
+- [docs/supply-chain-review.md](./docs/supply-chain-review.md)
+- [docs/residual-risk-register.md](./docs/residual-risk-register.md)
 
 The repo wiki Home page is now available in the GitHub wiki and should become
 the canonical operator/setup guide as later phases land.

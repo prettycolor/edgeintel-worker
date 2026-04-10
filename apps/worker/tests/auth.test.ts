@@ -45,4 +45,50 @@ describe("operator session auth", () => {
       error: "Missing Cf-Access-Jwt-Assertion header.",
     });
   });
+
+  it("does not allow the dev bypass on non-local hosts", async () => {
+    const result = await requireOperatorSession(
+      new Request("https://edgeintel.example.com/app/tunnels", {
+        headers: {
+          "x-edgeintel-dev-email": "owner@example.com",
+        },
+      }),
+      {
+        ACCESS_ALLOW_DEV_BYPASS: "true",
+        ACCESS_TEAM_DOMAIN: "team.cloudflareaccess.com",
+        ACCESS_AUD: "aud-value",
+      } as Env,
+    );
+
+    expect(result).toBeInstanceOf(Response);
+    if (!(result instanceof Response)) {
+      throw new Error("Expected a Response when bypass is attempted remotely.");
+    }
+
+    expect(result.status).toBe(401);
+  });
+
+  it("rejects malformed Access JWT assertions", async () => {
+    const result = await requireOperatorSession(
+      new Request("https://edgeintel.example.com/app/tunnels", {
+        headers: {
+          "Cf-Access-Jwt-Assertion": "not-a-jwt",
+        },
+      }),
+      {
+        ACCESS_TEAM_DOMAIN: "team.cloudflareaccess.com",
+        ACCESS_AUD: "aud-value",
+      } as Env,
+    );
+
+    expect(result).toBeInstanceOf(Response);
+    if (!(result instanceof Response)) {
+      throw new Error("Expected a Response for a malformed JWT.");
+    }
+
+    expect(result.status).toBe(403);
+    await expect(result.json()).resolves.toMatchObject({
+      error: expect.stringContaining("Access token validation failed"),
+    });
+  });
 });

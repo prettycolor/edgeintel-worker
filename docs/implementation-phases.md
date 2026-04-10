@@ -97,11 +97,19 @@ This repo should advance one verified phase at a time rather than accumulating s
 
 ## Next Logical Phases
 
-The next phase is **Phase 16: Security, Threat Modeling, And Adversarial Test
-Suite**.
+Phase 16 is now complete in the current repo state.
 
-The phase after that is **Phase 17: Authenticated EdgeIntel MCP**, but only if
-Phase 16 closes cleanly and the MCP decision gate still holds.
+- threat model:
+  [edgeintel-worker-threat-model.md](./edgeintel-worker-threat-model.md)
+- security test matrix:
+  [security-test-matrix.md](./security-test-matrix.md)
+- supply-chain review:
+  [supply-chain-review.md](./supply-chain-review.md)
+- residual risk register:
+  [residual-risk-register.md](./residual-risk-register.md)
+
+The next phase is **Phase 17: Authenticated EdgeIntel MCP research and design**,
+not implementation-by-default.
 
 ## Phase 0: Foundation Lock-In
 

@@ -107,6 +107,12 @@ import {
 import { renderProviderControlPlaneApp } from "./lib/app-shell";
 import { renderTunnelControlPlaneApp } from "./lib/tunnel-app-shell";
 import {
+  normalizePairingCreateInput,
+  normalizePairingExchangeInput,
+  normalizeTunnelHeartbeatInput,
+} from "./lib/connector-input";
+import { routeRequiresOperatorSession } from "./lib/route-auth";
+import {
   decryptProviderSecretPayload,
   decryptTunnelSecretPayload,
   encryptProviderSecretPayload,
@@ -200,51 +206,7 @@ async function streamJobEvents(env: Env, jobId: string, cursor = 0): Promise<Res
 }
 
 function isOperatorControlPlaneRoute(request: Request, path: string): boolean {
-  if (request.method === "GET" && (path === "/app" || path === "/app/providers")) {
-    return true;
-  }
-
-  if (request.method === "GET" && path === "/app/tunnels") {
-    return true;
-  }
-
-  if (path === "/api/session") {
-    return true;
-  }
-
-  if (path === "/api/settings/providers" || path.startsWith("/api/settings/providers/")) {
-    return true;
-  }
-
-  if (path === "/api/settings/provider-catalog") {
-    return true;
-  }
-
-  if (path === "/api/tunnels") {
-    return true;
-  }
-
-  if (/^\/api\/tunnels\/[^/]+$/.test(path)) {
-    return true;
-  }
-
-  if (/^\/api\/tunnels\/[^/]+\/(test|rotate-token|events|observability)$/.test(path)) {
-    return true;
-  }
-
-  if (path === "/api/pairings") {
-    return true;
-  }
-
-  if (request.method === "GET" && path === "/api/zones") {
-    return true;
-  }
-
-  if (request.method === "POST" && path === "/api/hostnames/validate") {
-    return true;
-  }
-
-  return false;
+  return routeRequiresOperatorSession(request, path);
 }
 
 function buildPairingMetadata(
@@ -1376,7 +1338,16 @@ async function handleTunnelHeartbeat(
   }
 
   const body = (await request.json().catch(() => ({}))) as TunnelHeartbeatRequestBody;
-  const connectorStatus = body.connectorStatus ?? "connected";
+  let normalizedBody;
+  try {
+    normalizedBody = normalizeTunnelHeartbeatInput(body);
+  } catch (error) {
+    return badRequest(
+      error instanceof Error ? error.message : "Invalid heartbeat payload.",
+    );
+  }
+
+  const connectorStatus = normalizedBody.connectorStatus;
   const currentMetadata = safeJsonParse<Record<string, unknown>>(
     existing.metadataJson,
     {},
@@ -1403,10 +1374,10 @@ async function handleTunnelHeartbeat(
       connector: {
         pairingId,
         status: connectorStatus,
-        version: body.version ?? null,
-        localServiceReachable: body.localServiceReachable ?? null,
-        model: body.model ?? null,
-        note: body.note ?? null,
+        version: normalizedBody.version,
+        localServiceReachable: normalizedBody.localServiceReachable,
+        model: normalizedBody.model,
+        note: normalizedBody.note,
         heartbeatAt: new Date().toISOString(),
       },
     }),
@@ -1417,16 +1388,16 @@ async function handleTunnelHeartbeat(
     buildPairingMetadata(pairing.metadataJson, {
       lastHeartbeatAt: new Date().toISOString(),
       lastStatus: connectorStatus,
-      lastNote: body.note ?? null,
-      lastReachable: body.localServiceReachable ?? null,
+      lastNote: normalizedBody.note,
+      lastReachable: normalizedBody.localServiceReachable,
       connectorName: pairing.connectorName,
-      connectorVersion: body.version ?? pairing.connectorVersion,
+      connectorVersion: normalizedBody.version ?? pairing.connectorVersion,
     }),
   );
   if (
     previousStatus !== connectorStatus ||
-    previousVersion !== (body.version ?? null) ||
-    previousReachable !== (body.localServiceReachable ?? null)
+    previousVersion !== normalizedBody.version ||
+    previousReachable !== normalizedBody.localServiceReachable
   ) {
     await insertTunnelEvent(env, {
       tunnelId,
@@ -1440,9 +1411,9 @@ async function handleTunnelHeartbeat(
       summary: `Connector ${connectorStatus} for ${existing.publicHostname}`,
       detailJson: JSON.stringify({
         pairingId,
-        version: body.version ?? null,
-        localServiceReachable: body.localServiceReachable ?? null,
-        note: body.note ?? null,
+        version: normalizedBody.version,
+        localServiceReachable: normalizedBody.localServiceReachable,
+        note: normalizedBody.note,
       }),
     }).catch(() => {});
   }
@@ -1460,26 +1431,30 @@ async function handleCreatePairing(
   session: OperatorSession,
 ): Promise<Response> {
   const body = (await request.json().catch(() => ({}))) as PairingCreateRequestBody;
-  const tunnelId = body.tunnelId?.trim();
-  if (!tunnelId) {
-    return badRequest("tunnelId is required.");
+  let normalizedBody;
+  try {
+    normalizedBody = normalizePairingCreateInput(body);
+  } catch (error) {
+    return badRequest(
+      error instanceof Error ? error.message : "Invalid pairing payload.",
+    );
   }
 
-  const tunnel = await getTunnelRecord(env, tunnelId);
+  const tunnel = await getTunnelRecord(env, normalizedBody.tunnelId);
   if (!tunnel) {
     return notFound("Tunnel record not found.");
   }
 
-  const issued = await issuePairingSecret(env, body.expiresInSeconds ?? null);
+  const issued = await issuePairingSecret(env, normalizedBody.expiresInSeconds);
   const pairingId = await createPairingSession(env, {
-    tunnelId,
+    tunnelId: normalizedBody.tunnelId,
     issuedBySubject: session.subject,
     issuedByEmail: session.email,
     pairingTokenHash: issued.pairingTokenHash,
     expiresAt: issued.expiresAt,
     metadataJson: JSON.stringify({
-      label: body.label?.trim() || null,
-      note: body.note?.trim() || null,
+      label: normalizedBody.label,
+      note: normalizedBody.note,
       issuedByName: session.name,
       issuedByMode: session.mode,
     }),
@@ -1494,7 +1469,7 @@ async function handleCreatePairing(
   }
 
   await insertTunnelEvent(env, {
-    tunnelId,
+    tunnelId: tunnel.id,
     kind: "pairing.created",
     level: "info",
     summary: `Created one-time pairing for ${tunnel.publicHostname}`,
@@ -1534,12 +1509,19 @@ async function handleExchangePairing(
   }
 
   const body = (await request.json().catch(() => ({}))) as PairingExchangeRequestBody;
-  const pairingToken = body.pairingToken?.trim();
-  if (!pairingToken) {
-    return badRequest("pairingToken is required.");
+  let normalizedBody;
+  try {
+    normalizedBody = normalizePairingExchangeInput(body);
+  } catch (error) {
+    return badRequest(
+      error instanceof Error ? error.message : "Invalid pairing exchange payload.",
+    );
   }
 
-  const tokenValid = await verifyOpaqueToken(pairingToken, pairing.pairingTokenHash);
+  const tokenValid = await verifyOpaqueToken(
+    normalizedBody.pairingToken,
+    pairing.pairingTokenHash,
+  );
   if (!tokenValid) {
     return jsonResponse(
       { error: "Pairing token is invalid." },
@@ -1555,17 +1537,17 @@ async function handleExchangePairing(
   const secrets = await decryptTunnelSecretPayload(env, tunnel.secretEnvelopeJson);
   const connectorSession = await issueConnectorSession(env);
   const metadataJson = buildPairingMetadata(pairing.metadataJson, {
-    connectorName: body.connectorName?.trim() || null,
-    connectorVersion: body.connectorVersion?.trim() || null,
-    connectorNote: body.note?.trim() || null,
+    connectorName: normalizedBody.connectorName,
+    connectorVersion: normalizedBody.connectorVersion,
+    connectorNote: normalizedBody.note,
   });
 
   await revokeOtherActivePairingsForTunnel(env, tunnel.id, pairingId);
   const activated = await activatePairingSession(env, pairingId, {
     connectorTokenHash: connectorSession.connectorTokenHash,
     connectorExpiresAt: connectorSession.expiresAt,
-    connectorName: body.connectorName?.trim() || null,
-    connectorVersion: body.connectorVersion?.trim() || null,
+    connectorName: normalizedBody.connectorName,
+    connectorVersion: normalizedBody.connectorVersion,
     metadataJson,
   });
   if (!activated) {

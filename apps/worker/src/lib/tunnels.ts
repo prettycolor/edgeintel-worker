@@ -231,6 +231,14 @@ function ensureLocalServiceUrl(value: string): string {
     throw new Error("localServiceUrl must use http:// or https://.");
   }
 
+  if (parsed.username || parsed.password) {
+    throw new Error("localServiceUrl must not embed credentials in the URL.");
+  }
+
+  if (parsed.hash) {
+    throw new Error("localServiceUrl must not include a URL fragment.");
+  }
+
   return parsed.toString().replace(/\/+$/, "");
 }
 

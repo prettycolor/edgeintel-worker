@@ -6,17 +6,23 @@ Should EdgeIntel expose its own MCP server?
 
 ## Short Answer
 
-Yes, but not as the next phase.
+Yes, but not as the next implementation phase.
 
 An EdgeIntel MCP server would be a strong addition because it would let Claude,
 Codex, ChatGPT-compatible MCP clients, and internal SE copilots invoke EdgeIntel
 as a real tool surface instead of only using the HTTP API or app shell.
 
+Phase 16 is now closed in the repo, and the current conclusion is still:
+
+- do **not** implement MCP yet
+- move into Phase 17 research/design only
+
 The right implementation order is:
 
 1. finish the release-ready Worker and operator flows
 2. close Phase 16 security and hardening
-3. only then add an **authenticated remote MCP surface**
+3. do the dedicated MCP research/design pass
+4. only then add an **authenticated remote MCP surface**
 
 ## Why It Is Worth Building
 
@@ -133,7 +139,8 @@ correct to build it before the security phase.
 The right sequence is:
 
 - Phase 16: security, threat modeling, and adversarial test suite
-- Phase 17: authenticated EdgeIntel MCP, only if Phase 16 closes cleanly
+- Phase 17: authenticated EdgeIntel MCP research/design
+- implementation only after the Phase 17 security/tooling gate is approved
 
 ## Recommended Future Phase
 
