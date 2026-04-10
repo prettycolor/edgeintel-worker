@@ -37,7 +37,7 @@
 - **Recommended next step:** add stronger UI guardrails that warn on
   non-Access-protected public hostnames for local-model providers.
 
-## R5. MCP is not safe to implement by default yet
+## R5. MCP implementation still carries high blast radius if the Phase 17 plan is ignored
 
 - **Impact:** critical
 - **Likelihood:** high if rushed
@@ -45,8 +45,9 @@
   exports, commercial outputs, tunnel orchestration, and credential-bearing
   control-plane flows. Turning that into an MCP surface without explicit tool
   scoping and confirmation would be dangerous.
-- **Recommended next step:** keep MCP in research/design mode only until a
-  dedicated Phase 17 plan exists.
+- **Recommended next step:** implement MCP only through the approved
+  Phase 17 plan, keep secret-bearing surfaces out of scope, and add the
+  dedicated MCP negative test suite during implementation.
 
 ## R6. Desktop packaging dependencies still need deeper triage
 

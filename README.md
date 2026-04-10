@@ -161,6 +161,9 @@ marketing website.
   Worker package into a single giant app.
 - The current UI direction is documented in
   [docs/mockups/README.md](./docs/mockups/README.md).
+- The MCP decision and rollout are documented in
+  [docs/phase-17-edgeintel-mcp-plan.md](./docs/phase-17-edgeintel-mcp-plan.md)
+  and [docs/edgeintel-mcp-tool-matrix.md](./docs/edgeintel-mcp-tool-matrix.md).
 
 That means the project is Cloudflare-native, but it is not automatically an
 embedded panel inside Cloudflare's own dashboard product.

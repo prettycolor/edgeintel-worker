@@ -108,8 +108,14 @@ Phase 16 is now complete in the current repo state.
 - residual risk register:
   [residual-risk-register.md](./residual-risk-register.md)
 
-The next phase is **Phase 17: Authenticated EdgeIntel MCP research and design**,
-not implementation-by-default.
+Phase 17 is now complete in the current repo state.
+
+- MCP plan:
+  [phase-17-edgeintel-mcp-plan.md](./phase-17-edgeintel-mcp-plan.md)
+- MCP tool matrix:
+  [edgeintel-mcp-tool-matrix.md](./edgeintel-mcp-tool-matrix.md)
+
+The next phase is **Phase 18: Authenticated EdgeIntel MCP implementation**.
 
 ## Phase 0: Foundation Lock-In
 

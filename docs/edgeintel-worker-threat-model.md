@@ -184,10 +184,11 @@ Out of scope:
 - **Likelihood:** high if implemented loosely
 - **Impact:** critical
 - **Priority:** critical
-- **Current mitigation:** no MCP server exists yet; Phase 16 explicitly keeps
-  MCP out of scope.
-- **Residual risk:** MCP remains deferred until a dedicated Phase 17 design and
-  security gate exist.
+- **Current mitigation:** no MCP server is implemented yet, and the approved
+  Phase 17 plan keeps the first MCP surface bounded to authenticated,
+  scope-checked tools with secret-bearing routes excluded.
+- **Residual risk:** the implementation phase still needs a dedicated MCP
+  negative test suite and release gate before the server can ship.
 
 ## Existing Mitigations Present In Code
 
@@ -218,12 +219,14 @@ Out of scope:
 
 ## Exit Decision For MCP
 
-**Decision:** defer MCP implementation.
+**Decision:** approve MCP for the next implementation phase.
 
 Reason:
 
-- EdgeIntel is now in a safer position for HTTP/app-shell/operator usage, but a
-  remote MCP server would create a new high-impact control surface.
-- The current repo still needs Phase 17-specific design work for tool scoping,
-  read-only vs mutating operations, human confirmation boundaries, and MCP auth.
-- The right next move is MCP research and design, not implementation-by-default.
+- EdgeIntel is now in a safer position for HTTP/app-shell/operator usage, and
+  the dedicated Phase 17 plan now defines the tool scoping, auth model, and
+  non-negotiable exclusions needed to build MCP correctly.
+- The next move is a bounded implementation phase, not generic additional
+  evaluation.
+- The MCP release gate still requires tool-specific authorization tests and a
+  dedicated negative suite before shipping.

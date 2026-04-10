@@ -6,23 +6,25 @@ Should EdgeIntel expose its own MCP server?
 
 ## Short Answer
 
-Yes, but not as the next implementation phase.
+Yes, and the research/design gate is now complete.
 
 An EdgeIntel MCP server would be a strong addition because it would let Claude,
 Codex, ChatGPT-compatible MCP clients, and internal SE copilots invoke EdgeIntel
 as a real tool surface instead of only using the HTTP API or app shell.
 
-Phase 16 is now closed in the repo, and the current conclusion is still:
+Phase 16 is closed, and Phase 17 has now completed the design work needed to
+move forward.
 
-- do **not** implement MCP yet
-- move into Phase 17 research/design only
+The current conclusion is:
 
-The right implementation order is:
+- do **not** mirror the existing HTTP API directly into MCP
+- do build a **dedicated authenticated remote MCP surface**
+- implement it as the next phase using Cloudflare’s Worker-native MCP stack
 
-1. finish the release-ready Worker and operator flows
-2. close Phase 16 security and hardening
-3. do the dedicated MCP research/design pass
-4. only then add an **authenticated remote MCP surface**
+The decision-complete design artifacts are:
+
+- [Phase 17: EdgeIntel MCP Plan](./phase-17-edgeintel-mcp-plan.md)
+- [EdgeIntel MCP Tool Matrix](./edgeintel-mcp-tool-matrix.md)
 
 ## Why It Is Worth Building
 
@@ -118,36 +120,37 @@ Rules for EdgeIntel MCP:
 - keep AI away from raw secrets
 - keep private-network and exploit behavior out of scope
 
-## Research Gates Before Implementation
+## Phase 17 Outcome
 
-Do not implement EdgeIntel MCP until these are closed:
+The research gates are now closed:
 
-1. review the latest Cloudflare remote MCP patterns and auth guidance
-2. review current MCP spec requirements for Streamable HTTP and tool behavior
-3. audit EdgeIntel’s existing auth, mutation routes, and secret handling
-4. identify which tools are safe to expose without mutation
-5. perform targeted repo research across relevant internal/public repos only if
-   it materially improves the design
+1. current Cloudflare remote MCP patterns and auth guidance were reviewed
+2. current MCP transport, authorization, and tool-behavior requirements were reviewed
+3. EdgeIntel’s auth, mutation routes, and secret boundaries were audited
+4. the safe first tool set was identified
+5. relevant repo-local MCP patterns were reviewed where they materially helped
 
-That research should be evidence-based. Do not implement MCP on instinct.
+The conclusion is now specific:
+
+- EdgeIntel MCP is approved
+- the first implementation should use a stateless Worker MCP server
+- it should use OAuth-based authentication rather than the current browser-only
+  Access JWT gate
+- it should start with read-heavy and bounded tools only
+- provider secrets, tunnel bootstrap, pairings, and heartbeat flows stay out of
+  MCP
 
 ## Logical Conclusion For EdgeIntel
 
-For this use case, MCP is a strong likely addition, but it is not logically
-correct to build it before the security phase.
-
-The right sequence is:
-
-- Phase 16: security, threat modeling, and adversarial test suite
-- Phase 17: authenticated EdgeIntel MCP research/design
-- implementation only after the Phase 17 security/tooling gate is approved
+For this use case, MCP is no longer a likely future addition. It is the correct
+next expansion, provided it follows the Phase 17 design artifacts.
 
 ## Recommended Future Phase
 
-- **Phase 17: Authenticated EdgeIntel MCP**
+- **Phase 18: Authenticated EdgeIntel MCP implementation**
   - remote MCP endpoint on Workers
-  - read-oriented tools first
-  - Access or OAuth auth
+  - Access-backed OAuth flow
+  - read-oriented and bounded tools first
   - MCP Inspector verification
-  - Claude/Codex connection guide
-  - mutation tools only after security review
+  - Claude/Codex/Cursor connection guide
+  - mutation tools only after the initial MCP release is stable
