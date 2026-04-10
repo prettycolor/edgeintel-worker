@@ -4,6 +4,17 @@ This roadmap is grounded in the current repository state. The Worker scaffold, D
 
 The goal of the next buildout is not to re-architect from scratch. It is to harden, deepen, and connect the existing pieces until `EdgeIntel` becomes a strong production-style domain posture and Cloudflare remediation platform for the `hostingtool.dev` / `hostinginfo.gg` environment.
 
+## Current Status
+
+- Phases 0 through 6 are implemented and verified in the current repo.
+- Phase 7 UI direction is aligned around the in-app app-shell prototype.
+- Phase 7A provider control-plane backend is implemented:
+  - provider settings schema
+  - encrypted secret persistence
+  - provider CRUD APIs
+  - provider connection tests and persisted test results
+- Remaining Phase 7 work is focused on the hosted-provider UI, tunnel orchestration, the local connector, and the local-model onboarding wizard.
+
 ## Execution Protocol
 
 Every phase follows the same build discipline:
@@ -366,12 +377,11 @@ Package the system into a strong interview narrative and live demo flow.
 
 ## Immediate Next Sprint
 
-The highest-value next sprint is:
+The highest-value next sprint now is:
 
-- environment bootstrap
-- D1 migration workflow
-- module timing and per-module scan errors
-- stronger HTTP evidence capture
-- richer Markdown report export
+- hosted provider settings UI in the app shell
+- connection-test UX with operator-grade diagnostics
+- tunnel orchestration control-plane APIs
+- connector pairing and local-model onboarding design
 
-That sprint turns the repo from “excellent scaffold” into “credible working product.”
+That sprint turns Phase 7 from architectural direction into a usable onboarding surface.

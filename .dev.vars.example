@@ -13,6 +13,9 @@ BROWSER_RENDERING_API_TOKEN=
 # Optional Cloudflare account identifier for account-scoped helpers.
 CLOUDFLARE_ACCOUNT_ID=
 
+# Optional base64-encoded 32-byte encryption key for provider secret storage.
+PROVIDER_SECRET_ENCRYPTION_KEY=
+
 # Optional self-hosted model path. This must be HTTPS in deployed Worker use.
 LOCAL_MODEL_GATEWAY_URL=
 LOCAL_MODEL_MODEL=

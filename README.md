@@ -12,6 +12,9 @@ Cloudflare-native domain posture and remediation engine for the `hostingtool.dev
   for latest posture and diff-aware run history
 - `GET /api/inference/capabilities` to inspect the configured hosted and
   local-model inference routes
+- `GET|POST|PATCH|DELETE /api/settings/providers` plus
+  `POST /api/settings/providers/:id/test` for provider control-plane
+  configuration, encrypted secret storage, and connection testing
 - `POST /api/scans/:scanRunId/ai-brief` to generate an evidence-bounded AI
   brief from persisted findings and recommendations
 - Durable Object job coordination with job snapshots and event streaming
@@ -43,6 +46,12 @@ Cloudflare-native domain posture and remediation engine for the `hostingtool.dev
   - OpenAI-compatible HTTPS support for self-hosted Ollama/Gemma endpoints
   - Access header support for Tunnel-protected local-model routes
   - grounded Markdown brief generation that never treats AI as source-of-truth
+- Provider control-plane foundations with:
+  - D1-backed provider settings records
+  - AES-GCM envelope encryption for stored provider secrets
+  - per-provider connection testing for Workers AI, Anthropic, and
+    OpenAI-compatible routes
+  - persisted test status and result history for the app shell
 
 ## Layout
 
@@ -83,6 +92,20 @@ npm run db:local:reset
 npm run verify
 ```
 
+## App Surface
+
+EdgeIntel is being built as a Cloudflare-native application, not as a separate
+marketing website.
+
+- The Worker runtime and control plane live on Cloudflare.
+- The operator UX is intended to be an authenticated app shell served by the
+  EdgeIntel stack itself.
+- The current UI direction is documented in
+  [docs/mockups/README.md](./docs/mockups/README.md).
+
+That means the project is Cloudflare-native, but it is not automatically an
+embedded panel inside Cloudflare's own dashboard product.
+
 Remote Browser Rendering is optional. If you want rendered markdown and screenshots from Cloudflare Browser Rendering REST, set:
 
 - `BROWSER_RENDERING_REST_BASE_URL`
@@ -112,6 +135,9 @@ controlled HTTPS endpoint, ideally behind Cloudflare Tunnel, and either:
 
 Phase 6 now includes the provider abstraction and setup documentation for this
 path. Start with [docs/hybrid-inference.md](./docs/hybrid-inference.md).
+
+Phase 7A now adds the provider control-plane backend needed for the upcoming
+hosted-provider settings UI and local-model tunnel wizard.
 
 ## Current Scope
 

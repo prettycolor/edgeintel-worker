@@ -22,6 +22,13 @@ export type InferenceTransport =
   | "ai-gateway-binding"
   | "ai-gateway-fetch"
   | "direct-openai-compatible";
+export type ProviderKind =
+  | "hosted-api-key"
+  | "hosted-oauth"
+  | "local-direct"
+  | "local-gateway";
+export type ProviderStatus = "draft" | "ready" | "error" | "disabled";
+export type ProviderTestStatus = "passed" | "failed" | "warning";
 
 export interface ScanRequestBody {
   domain?: string;
@@ -38,6 +45,33 @@ export interface AiBriefRequestBody {
   provider?: string;
   model?: string;
   instruction?: string;
+}
+
+export interface ProviderSecretPayload {
+  apiKey?: string;
+  gatewayToken?: string;
+  accessClientId?: string;
+  accessClientSecret?: string;
+  oauthAccessToken?: string;
+  oauthRefreshToken?: string;
+  [key: string]: string | undefined;
+}
+
+export interface ProviderSettingsRequestBody {
+  kind?: ProviderKind;
+  providerCode?: string;
+  displayName?: string;
+  baseUrl?: string | null;
+  defaultModel?: string | null;
+  usesAiGateway?: boolean;
+  oauthConnected?: boolean;
+  status?: ProviderStatus;
+  metadata?: Record<string, unknown>;
+  secret?: ProviderSecretPayload | null;
+}
+
+export interface ProviderTestRequestBody {
+  persistResult?: boolean;
 }
 
 export interface ScanTarget {
@@ -220,6 +254,18 @@ export interface InferenceCapability {
   notes: string[];
 }
 
+export interface ProviderConnectionTestResult {
+  status: ProviderTestStatus;
+  message: string;
+  latencyMs: number;
+  transport: string;
+  targetUrl: string | null;
+  providerCode: string;
+  model: string | null;
+  details: Record<string, unknown>;
+  testedAt: string;
+}
+
 export interface ScanResultBundle {
   domain: string;
   scannedAt: string;
@@ -307,6 +353,26 @@ export interface PersistedDomainWatch {
   active: boolean;
   lastEnqueuedAt: string | null;
   nextRunAt: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PersistedProviderSetting {
+  id: string;
+  kind: ProviderKind;
+  providerCode: string;
+  displayName: string;
+  baseUrl: string | null;
+  defaultModel: string | null;
+  usesAiGateway: boolean;
+  oauthConnected: boolean;
+  status: ProviderStatus;
+  secretConfigured: boolean;
+  secretEnvelopeJson: string | null;
+  lastTestedAt: string | null;
+  lastTestStatus: ProviderTestStatus | null;
+  lastTestResultJson: string | null;
+  metadataJson: string;
   createdAt: string;
   updatedAt: string;
 }

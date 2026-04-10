@@ -5,8 +5,10 @@ import type {
   Finding,
   PersistedDomainWatch,
   PersistedArtifact,
+  PersistedProviderSetting,
   PersistedRecommendation,
   PersistedScanRun,
+  ProviderConnectionTestResult,
   Recommendation,
   ScanResultBundle,
   ScanRunStatus,
@@ -44,6 +46,32 @@ function toRun(row: Record<string, unknown>): PersistedScanRun {
     updatedAt: String(row.updated_at),
     startedAt: (row.started_at as string | null) ?? null,
     completedAt: (row.completed_at as string | null) ?? null,
+  };
+}
+
+function toProviderSetting(
+  row: Record<string, unknown>,
+): PersistedProviderSetting {
+  return {
+    id: String(row.id),
+    kind: String(row.kind) as PersistedProviderSetting["kind"],
+    providerCode: String(row.provider_code),
+    displayName: String(row.display_name),
+    baseUrl: (row.base_url as string | null) ?? null,
+    defaultModel: (row.default_model as string | null) ?? null,
+    usesAiGateway: Number(row.uses_ai_gateway ?? 0) === 1,
+    oauthConnected: Number(row.oauth_connected ?? 0) === 1,
+    status: String(row.status) as PersistedProviderSetting["status"],
+    secretConfigured: Boolean(row.secret_envelope_json),
+    secretEnvelopeJson: (row.secret_envelope_json as string | null) ?? null,
+    lastTestedAt: (row.last_tested_at as string | null) ?? null,
+    lastTestStatus:
+      (row.last_test_status as PersistedProviderSetting["lastTestStatus"] | null) ??
+      null,
+    lastTestResultJson: (row.last_test_result_json as string | null) ?? null,
+    metadataJson: String(row.metadata_json ?? "{}"),
+    createdAt: String(row.created_at),
+    updatedAt: String(row.updated_at),
   };
 }
 
@@ -473,6 +501,122 @@ export async function getExportRecord(
   );
 }
 
+export async function createProviderSetting(
+  env: Env,
+  input: {
+    kind: PersistedProviderSetting["kind"];
+    providerCode: string;
+    displayName: string;
+    baseUrl: string | null;
+    defaultModel: string | null;
+    usesAiGateway: boolean;
+    oauthConnected: boolean;
+    status: PersistedProviderSetting["status"];
+    secretEnvelopeJson: string | null;
+    metadataJson: string;
+  },
+): Promise<string> {
+  const providerId = crypto.randomUUID();
+  const timestamp = nowIso();
+
+  await env.EDGE_DB.prepare(
+    `INSERT INTO provider_settings (
+      id, kind, provider_code, display_name, base_url, default_model,
+      uses_ai_gateway, oauth_connected, status, secret_envelope_json,
+      metadata_json, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  )
+    .bind(
+      providerId,
+      input.kind,
+      input.providerCode,
+      input.displayName,
+      input.baseUrl,
+      input.defaultModel,
+      input.usesAiGateway ? 1 : 0,
+      input.oauthConnected ? 1 : 0,
+      input.status,
+      input.secretEnvelopeJson,
+      input.metadataJson,
+      timestamp,
+      timestamp,
+    )
+    .run();
+
+  return providerId;
+}
+
+export async function updateProviderSetting(
+  env: Env,
+  providerId: string,
+  input: {
+    kind: PersistedProviderSetting["kind"];
+    providerCode: string;
+    displayName: string;
+    baseUrl: string | null;
+    defaultModel: string | null;
+    usesAiGateway: boolean;
+    oauthConnected: boolean;
+    status: PersistedProviderSetting["status"];
+    secretEnvelopeJson: string | null;
+    metadataJson: string;
+  },
+): Promise<void> {
+  await env.EDGE_DB.prepare(
+    `UPDATE provider_settings
+     SET kind = ?,
+         provider_code = ?,
+         display_name = ?,
+         base_url = ?,
+         default_model = ?,
+         uses_ai_gateway = ?,
+         oauth_connected = ?,
+         status = ?,
+         secret_envelope_json = ?,
+         metadata_json = ?,
+         updated_at = ?
+     WHERE id = ?`,
+  )
+    .bind(
+      input.kind,
+      input.providerCode,
+      input.displayName,
+      input.baseUrl,
+      input.defaultModel,
+      input.usesAiGateway ? 1 : 0,
+      input.oauthConnected ? 1 : 0,
+      input.status,
+      input.secretEnvelopeJson,
+      input.metadataJson,
+      nowIso(),
+      providerId,
+    )
+    .run();
+}
+
+export async function storeProviderTestResult(
+  env: Env,
+  providerId: string,
+  result: ProviderConnectionTestResult,
+): Promise<void> {
+  await env.EDGE_DB.prepare(
+    `UPDATE provider_settings
+     SET last_tested_at = ?,
+         last_test_status = ?,
+         last_test_result_json = ?,
+         updated_at = ?
+     WHERE id = ?`,
+  )
+    .bind(
+      result.testedAt,
+      result.status,
+      JSON.stringify(result),
+      nowIso(),
+      providerId,
+    )
+    .run();
+}
+
 export async function listDomainHistory(
   env: Env,
   domain: string,
@@ -483,6 +627,40 @@ export async function listDomainHistory(
     .bind(domain)
     .all<Record<string, unknown>>();
   return (result.results ?? []).map(toRun);
+}
+
+export async function listProviderSettings(
+  env: Env,
+): Promise<PersistedProviderSetting[]> {
+  const result = await env.EDGE_DB.prepare(
+    `SELECT *
+     FROM provider_settings
+     ORDER BY updated_at DESC, created_at DESC`,
+  ).all<Record<string, unknown>>();
+
+  return (result.results ?? []).map(toProviderSetting);
+}
+
+export async function getProviderSetting(
+  env: Env,
+  providerId: string,
+): Promise<PersistedProviderSetting | null> {
+  const row = await env.EDGE_DB.prepare(
+    `SELECT * FROM provider_settings WHERE id = ?`,
+  )
+    .bind(providerId)
+    .first<Record<string, unknown>>();
+
+  return row ? toProviderSetting(row) : null;
+}
+
+export async function deleteProviderSetting(
+  env: Env,
+  providerId: string,
+): Promise<void> {
+  await env.EDGE_DB.prepare(`DELETE FROM provider_settings WHERE id = ?`)
+    .bind(providerId)
+    .run();
 }
 
 export async function upsertDomainWatch(

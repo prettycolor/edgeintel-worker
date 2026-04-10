@@ -5,27 +5,33 @@ import {
   createExportRecord,
   createJob,
   createScanRuns,
+  createProviderSetting,
   deleteDomainWatch,
+  deleteProviderSetting,
   getArtifactsForRun,
   getDomainWatch,
   getExportRecord,
   getFindingsForRun,
   getJob,
   getLatestRunForDomain,
+  getProviderSetting,
   getRecommendationsForRun,
   getRunsForJob,
   getScanContext,
   getScanRun,
   insertArtifact,
+  listProviderSettings,
   listDueDomainWatches,
   listDomainHistory,
   markRunFailed,
   markDomainWatchEnqueued,
   markRunStarted,
   recalculateJobStatus,
+  storeProviderTestResult,
   storeRunBundle,
   attachWorkflowInstance,
   upsertDomainWatch,
+  updateProviderSetting,
 } from "./lib/repository";
 import { buildCanonicalUrl, normalizeDomain, normalizeRequestedDomains } from "./lib/domain";
 import {
@@ -54,11 +60,22 @@ import {
   generateAiBrief,
   getInferenceCapabilities,
 } from "./lib/inference";
+import {
+  normalizeProviderSettingsInput,
+  serializeProviderSetting,
+  testProviderConnection,
+} from "./lib/provider-settings";
+import {
+  decryptProviderSecretPayload,
+  encryptProviderSecretPayload,
+} from "./lib/secrets";
 import type {
   AiBriefRequestBody,
   ArtifactQueueMessage,
   DomainWatchRequestBody,
   ExportFormat,
+  ProviderSettingsRequestBody,
+  ProviderTestRequestBody,
   ScanQueueMessage,
   ScanRequestBody,
   ScanWorkflowParams,
@@ -308,6 +325,202 @@ async function handleInferenceCapabilities(env: Env): Promise<Response> {
   return jsonResponse({
     inference: getInferenceCapabilities(env),
   });
+}
+
+async function handleListProviders(env: Env): Promise<Response> {
+  const providers = await listProviderSettings(env);
+  return jsonResponse({
+    providers: providers.map(serializeProviderSetting),
+  });
+}
+
+async function handleGetProvider(env: Env, providerId: string): Promise<Response> {
+  const provider = await getProviderSetting(env, providerId);
+  if (!provider) return notFound("Provider setting not found.");
+
+  return jsonResponse({
+    provider: serializeProviderSetting(provider),
+  });
+}
+
+async function handleCreateProvider(
+  request: Request,
+  env: Env,
+): Promise<Response> {
+  let body: ProviderSettingsRequestBody;
+  try {
+    body = (await request.json()) as ProviderSettingsRequestBody;
+  } catch {
+    return badRequest("Request body must be valid JSON.");
+  }
+
+  try {
+    const normalized = normalizeProviderSettingsInput(body);
+    const secretEnvelopeJson = normalized.secret
+      ? await encryptProviderSecretPayload(env, normalized.secret)
+      : null;
+    const providerId = await createProviderSetting(env, {
+      kind: normalized.kind,
+      providerCode: normalized.providerCode,
+      displayName: normalized.displayName,
+      baseUrl: normalized.baseUrl,
+      defaultModel: normalized.defaultModel,
+      usesAiGateway: normalized.usesAiGateway,
+      oauthConnected: normalized.oauthConnected,
+      status: normalized.status,
+      secretEnvelopeJson,
+      metadataJson: JSON.stringify(normalized.metadata),
+    });
+
+    const created = await getProviderSetting(env, providerId);
+    if (!created) {
+      return jsonResponse({ error: "Provider was created but could not be loaded." }, { status: 500 });
+    }
+
+    return jsonResponse({ provider: serializeProviderSetting(created) }, { status: 201 });
+  } catch (error) {
+    return badRequest(
+      error instanceof Error ? error.message : "Invalid provider payload.",
+    );
+  }
+}
+
+async function handleUpdateProvider(
+  request: Request,
+  env: Env,
+  providerId: string,
+): Promise<Response> {
+  const existing = await getProviderSetting(env, providerId);
+  if (!existing) return notFound("Provider setting not found.");
+
+  let body: ProviderSettingsRequestBody;
+  try {
+    body = (await request.json()) as ProviderSettingsRequestBody;
+  } catch {
+    return badRequest("Request body must be valid JSON.");
+  }
+
+  try {
+    const merged = normalizeProviderSettingsInput(
+      {
+        kind: body.kind ?? existing.kind,
+        providerCode: body.providerCode ?? existing.providerCode,
+        displayName: body.displayName ?? existing.displayName,
+        baseUrl: body.baseUrl === undefined ? existing.baseUrl : body.baseUrl,
+        defaultModel:
+          body.defaultModel === undefined ? existing.defaultModel : body.defaultModel,
+        usesAiGateway: body.usesAiGateway ?? existing.usesAiGateway,
+        oauthConnected: body.oauthConnected ?? existing.oauthConnected,
+        status: body.status ?? existing.status,
+        metadata:
+          body.metadata ??
+          safeJsonParse(existing.metadataJson, {}),
+        secret: body.secret ?? undefined,
+      },
+      { partial: true },
+    );
+
+    const secretEnvelopeJson =
+      body.secret === undefined
+        ? existing.secretEnvelopeJson
+        : body.secret
+          ? await encryptProviderSecretPayload(env, body.secret)
+          : null;
+
+    await updateProviderSetting(env, providerId, {
+      kind: merged.kind,
+      providerCode: merged.providerCode,
+      displayName: merged.displayName,
+      baseUrl: merged.baseUrl,
+      defaultModel: merged.defaultModel,
+      usesAiGateway: merged.usesAiGateway,
+      oauthConnected: merged.oauthConnected,
+      status: merged.status,
+      secretEnvelopeJson,
+      metadataJson: JSON.stringify(merged.metadata),
+    });
+
+    const updated = await getProviderSetting(env, providerId);
+    if (!updated) {
+      return jsonResponse({ error: "Provider was updated but could not be loaded." }, { status: 500 });
+    }
+
+    return jsonResponse({ provider: serializeProviderSetting(updated) });
+  } catch (error) {
+    return badRequest(
+      error instanceof Error ? error.message : "Invalid provider payload.",
+    );
+  }
+}
+
+async function handleDeleteProvider(
+  env: Env,
+  providerId: string,
+): Promise<Response> {
+  const existing = await getProviderSetting(env, providerId);
+  if (!existing) return notFound("Provider setting not found.");
+
+  await deleteProviderSetting(env, providerId);
+  return jsonResponse({
+    deleted: true,
+    providerId,
+  });
+}
+
+async function handleTestProvider(
+  request: Request,
+  env: Env,
+  providerId: string,
+): Promise<Response> {
+  const provider = await getProviderSetting(env, providerId);
+  if (!provider) return notFound("Provider setting not found.");
+
+  const body = (await request.json().catch(() => ({}))) as ProviderTestRequestBody;
+
+  try {
+    const secrets = await decryptProviderSecretPayload(env, provider.secretEnvelopeJson);
+    const result = await testProviderConnection(env, provider, secrets, body);
+
+    if (body.persistResult !== false) {
+      await storeProviderTestResult(env, providerId, result);
+    }
+
+    const refreshed = await getProviderSetting(env, providerId);
+
+    return jsonResponse({
+      provider: refreshed ? serializeProviderSetting(refreshed) : serializeProviderSetting(provider),
+      testResult: result,
+    });
+  } catch (error) {
+    const failure = {
+      status: "failed",
+      message:
+        error instanceof Error
+          ? error.message
+          : "Provider connection test failed.",
+      latencyMs: 0,
+      transport: "control-plane-error",
+      targetUrl: provider.baseUrl,
+      providerCode: provider.providerCode,
+      model: provider.defaultModel,
+      details: {},
+      testedAt: new Date().toISOString(),
+    } as const;
+
+    if (body.persistResult !== false) {
+      await storeProviderTestResult(env, providerId, failure);
+    }
+
+    return jsonResponse(
+      {
+        provider: serializeProviderSetting(
+          (await getProviderSetting(env, providerId)) ?? provider,
+        ),
+        testResult: failure,
+      },
+      { status: 502 },
+    );
+  }
 }
 
 async function handleManualRescan(env: Env, domainParam: string): Promise<Response> {
@@ -679,6 +892,39 @@ export default class EdgeIntelWorker extends WorkerEntrypoint<Env> {
       return handleCreateAiBrief(request, this.env, path.split("/")[3]);
     }
 
+    if (request.method === "GET" && path === "/api/settings/providers") {
+      return handleListProviders(this.env);
+    }
+
+    if (request.method === "POST" && path === "/api/settings/providers") {
+      return handleCreateProvider(request, this.env);
+    }
+
+    if (request.method === "GET" && /^\/api\/settings\/providers\/[^/]+$/.test(path)) {
+      return handleGetProvider(this.env, path.split("/")[4]);
+    }
+
+    if (
+      request.method === "PATCH" &&
+      /^\/api\/settings\/providers\/[^/]+$/.test(path)
+    ) {
+      return handleUpdateProvider(request, this.env, path.split("/")[4]);
+    }
+
+    if (
+      request.method === "DELETE" &&
+      /^\/api\/settings\/providers\/[^/]+$/.test(path)
+    ) {
+      return handleDeleteProvider(this.env, path.split("/")[4]);
+    }
+
+    if (
+      request.method === "POST" &&
+      /^\/api\/settings\/providers\/[^/]+\/test$/.test(path)
+    ) {
+      return handleTestProvider(request, this.env, path.split("/")[4]);
+    }
+
     if (request.method === "GET" && /^\/api\/domains\/[^/]+\/history$/.test(path)) {
       return handleDomainHistory(this.env, decodeURIComponent(path.split("/")[3]));
     }
@@ -720,7 +966,7 @@ export default class EdgeIntelWorker extends WorkerEntrypoint<Env> {
 
     if (
       path.startsWith("/api/") &&
-      !["GET", "POST"].includes(request.method)
+      !["GET", "POST", "PATCH", "DELETE"].includes(request.method)
     ) {
       return methodNotAllowed();
     }

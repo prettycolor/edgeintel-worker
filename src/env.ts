@@ -39,6 +39,7 @@ export type Env = Omit<
   AI_UPSTREAM_API_KEY?: string;
   BROWSER_RENDERING_API_TOKEN?: string;
   CLOUDFLARE_ACCOUNT_ID?: string;
+  PROVIDER_SECRET_ENCRYPTION_KEY?: string;
   LOCAL_MODEL_GATEWAY_URL?: string;
   LOCAL_MODEL_MODEL?: string;
   LOCAL_MODEL_API_KEY?: string;

@@ -3,6 +3,9 @@
 This document defines the product architecture required to make EdgeIntel feel
 like a 5-minute setup instead of an operator-only project.
 
+The intended UX surface is the in-app EdgeIntel control plane, not a separate
+public website.
+
 ## What Is Factually True Today
 
 Implemented now:
@@ -13,6 +16,9 @@ Implemented now:
 - Access service token headers are supported for the local-model path.
 - `GET /api/inference/capabilities` exposes the configured inference routes.
 - `POST /api/scans/:scanRunId/ai-brief` exercises the configured route against grounded scan data.
+- Provider settings now persist in D1 with encrypted secret envelopes.
+- `GET|POST|PATCH|DELETE /api/settings/providers` is implemented.
+- `POST /api/settings/providers/:id/test` is implemented with persisted test results.
 
 Not implemented yet:
 
