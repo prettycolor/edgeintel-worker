@@ -7,6 +7,9 @@ operator use requires Cloudflare Access to be configured first. Without that,
 the public deployed hostname is only suitable for `/health`, MCP metadata, and
 basic auth-challenge smoke tests.
 
+That Access gate can be applied either to a custom hostname or directly to the
+deployed `workers.dev` URL.
+
 ## What Is UI-Driven Today
 
 Current app surfaces:

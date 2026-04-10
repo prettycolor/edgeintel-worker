@@ -38,7 +38,7 @@ Minimum sign-off:
 - public MCP metadata endpoints work remotely
 - `/mcp` returns the expected OAuth challenge without a token
 - scan, commercial brief, and export endpoints work remotely behind Access
-- Access-protected app routes work on the chosen hostname
+- Access-protected app routes work on the chosen host (`workers.dev` or custom domain)
 - `/authorize` works only after the `MCP_ACCESS_*` secrets are configured
 
 ## Demo Readiness

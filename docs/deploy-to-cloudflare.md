@@ -31,7 +31,9 @@ is the real product story.
 For the full operator path, also prepare:
 
 - a Zero Trust organization
-- a custom hostname you control for the EdgeIntel app
+- either:
+  - the default `workers.dev` hostname with Cloudflare Access enabled, or
+  - a custom hostname you control for the EdgeIntel app
 - a Cloudflare API token for in-app tunnel, DNS, and Access orchestration
 - a Cloudflare Access for SaaS OIDC application for the MCP surface
 
@@ -218,12 +220,22 @@ Cloudflare Access.
 
 ### Recommended pattern
 
-1. Attach the Worker to a custom hostname you control.
-2. Create a Cloudflare Access self-hosted application that protects that host.
+1. Choose the operator host:
+   - fastest path: enable Cloudflare Access on the deployed `workers.dev` URL
+   - production path: attach the Worker to a custom hostname you control
+2. Create or manage the Cloudflare Access protection for that host.
 3. Copy the Access application audience into `ACCESS_AUD`.
 4. Set `ACCESS_TEAM_DOMAIN` to your Zero Trust team domain.
 5. Verify that requests to `/app`, `/app/providers`, `/app/tunnels`, and the
    secret-bearing APIs now include `Cf-Access-Jwt-Assertion`.
+
+For `workers.dev`, Cloudflare documents the path as:
+
+1. Go to Workers & Pages.
+2. Select the Worker.
+3. Open `Settings > Domains & Routes`.
+4. For `workers.dev`, click `Enable Cloudflare Access`.
+5. Optionally open `Manage Cloudflare Access` to refine policies.
 
 Without this, the control-plane app routes will reject remote use.
 
@@ -277,7 +289,7 @@ If time is constrained, use this path:
 3. Show the deployed `workers.dev` or custom-domain health/MCP endpoints as the
    live Cloudflare proof point
 4. If Access is ready, switch to the full remote operator app demo on the
-   protected hostname
+   protected `workers.dev` URL or custom hostname
 
 That keeps the demo factual. It does not pretend the protected operator app is
 publicly usable before Access and MCP OAuth are actually configured.
