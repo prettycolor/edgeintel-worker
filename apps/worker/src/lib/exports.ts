@@ -5,6 +5,7 @@ import type {
   PersistedScanRun,
   ScanResultBundle,
 } from "../types";
+import { buildCommercialBrief } from "./commercial-brief";
 import { getFailedScanModules } from "./scanner";
 import { nowIso, safeJsonParse } from "./utils";
 
@@ -15,7 +16,7 @@ interface ExportContext {
   recommendations: PersistedRecommendation[];
 }
 
-const EXPORT_SCHEMA_VERSION = "edgeintel.export.v1.5";
+const EXPORT_SCHEMA_VERSION = "edgeintel.export.v1.6";
 const FINDING_SEVERITY_ORDER = ["critical", "high", "medium", "low", "info"] as const;
 
 function parseSummary(context: ExportContext): Record<string, unknown> {
@@ -93,6 +94,10 @@ function renderPostureBlock(context: ExportContext): string {
     typeof summary.wafProvider === "object" && summary.wafProvider
       ? String((summary.wafProvider as Record<string, unknown>).provider ?? "unknown")
       : "unknown";
+  const originProvider =
+    typeof summary.originProvider === "object" && summary.originProvider
+      ? String((summary.originProvider as Record<string, unknown>).provider ?? "unknown")
+      : "unknown";
 
   return [
     "## Detected Posture",
@@ -102,6 +107,7 @@ function renderPostureBlock(context: ExportContext): string {
     `- DNS Provider: ${dnsProvider}`,
     `- Edge Provider: ${edgeProvider}`,
     `- WAF Provider: ${wafProvider}`,
+    `- Origin Provider Hint: ${originProvider}`,
     `- Partial Module Failures: ${
       failedModules.length > 0 ? failedModules.join(", ") : "none"
     }`,
@@ -235,6 +241,41 @@ function renderArtifactIndex(context: ExportContext): string {
   ].join("\n");
 }
 
+function renderCommercialSection(context: ExportContext): string {
+  const brief = buildCommercialBrief(context);
+  return [
+    "## Commercial Brief",
+    "",
+    `- Cloudflare Fit: ${brief.cloudflareFit.score}/100 (${brief.cloudflareFit.status})`,
+    `- Access Hardening: ${brief.accessHardening.score}/100 (${brief.accessHardening.status})`,
+    `- Latency Opportunity: ${brief.latencyOpportunity.score}/100 (${brief.latencyOpportunity.status})`,
+    `- Resilience Opportunity: ${brief.resilienceOpportunity.score}/100 (${brief.resilienceOpportunity.status})`,
+    `- Origin Exposure: ${brief.originExposure.risk} (${brief.originExposure.confidence}/100)`,
+    "",
+    "### Why Now",
+    "",
+    (brief.whyNow.length > 0
+      ? brief.whyNow.map((entry) => `- ${entry}`).join("\n")
+      : "- No strong commercial inflection points were derived from the current scan."),
+    "",
+    "### Customer Narrative",
+    "",
+    brief.customerNarrative,
+    "",
+    "### Expansion Candidates",
+    "",
+    (brief.expansionCandidates.length > 0
+      ? brief.expansionCandidates
+          .map(
+            (candidate, index) =>
+              `${index + 1}. ${candidate.productCode}: ${candidate.reason}`,
+          )
+          .join("\n")
+      : "No expansion candidates were ranked from the current recommendation set."),
+    "",
+  ].join("\n");
+}
+
 function renderExportManifestMarkdown(
   context: ExportContext,
   format: ExportFormat,
@@ -256,6 +297,7 @@ export function renderMarkdownExport(context: ExportContext): string {
   return [
     buildExecutiveSummary(context),
     renderPostureBlock(context),
+    renderCommercialSection(context),
     renderFindingsMarkdown(context),
     renderRecommendationsSection(context),
     renderRolloutOrder(context),
@@ -338,6 +380,7 @@ resource "cloudflare_ruleset" "edgeintel_cache" {
 
 export function renderApiPayloadExport(context: ExportContext): string {
   const recommendations = sortRecommendations(context.recommendations);
+  const commercialBrief = buildCommercialBrief(context);
 
   const groupedByProduct = Object.fromEntries(
     recommendations.map((recommendation) => [
@@ -372,6 +415,7 @@ export function renderApiPayloadExport(context: ExportContext): string {
   return JSON.stringify(
     {
       manifest: buildExportManifest(context, "cf-api"),
+      commercialBrief,
       recommendationsByProduct: groupedByProduct,
     },
     null,
@@ -380,10 +424,12 @@ export function renderApiPayloadExport(context: ExportContext): string {
 }
 
 export function renderJsonExport(context: ExportContext): string {
+  const commercialBrief = buildCommercialBrief(context);
   return JSON.stringify(
     {
       manifest: buildExportManifest(context, "json"),
       run: context.run,
+      commercialBrief,
       findings: context.findings,
       artifacts: context.artifacts,
       recommendations: sortRecommendations(context.recommendations).map(

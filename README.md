@@ -12,6 +12,8 @@ Cloudflare-native domain posture and remediation engine for the `hostingtool.dev
   for latest posture and diff-aware run history
 - `GET /api/inference/capabilities` to inspect the configured hosted and
   local-model inference routes
+- `GET /api/scans/:scanRunId/commercial-brief` for an SE-grade Cloudflare fit,
+  access-hardening, latency/resilience, and expansion-motion summary
 - `GET|POST|PATCH|DELETE /api/settings/providers` plus
   `GET /api/settings/provider-catalog`,
   `POST /api/settings/providers/:id/test`, and
@@ -59,6 +61,12 @@ Cloudflare-native domain posture and remediation engine for the `hostingtool.dev
   - blocker tracking
   - evidence references
   - executive and technical summaries
+- Commercial brief output with:
+  - Cloudflare fit scoring
+  - access-hardening posture scoring
+  - latency and resilience opportunity scoring
+  - origin exposure narrative
+  - ranked expansion candidates
 - Hybrid inference scaffolding with:
   - AI Gateway binding or HTTPS endpoint support for hosted models
   - OpenAI-compatible HTTPS support for self-hosted Ollama/Gemma endpoints
@@ -105,6 +113,8 @@ Cloudflare-native domain posture and remediation engine for the `hostingtool.dev
   Electron macOS tray/window app for local pairing, `cloudflared` install and supervision, and machine-side diagnostics
 - `packages/shared-contracts`
   Shared TypeScript contracts for operator surfaces and future connector/worker interop
+- `packages/intelligence-rules`
+  Worker-safe hosting/provider canonicalization rules extracted from the hostinginfo intelligence layer
 - `packages/connector-core`
   Current reference runtime for pairing exchange, local probing, and heartbeat reporting
 
@@ -234,6 +244,20 @@ Phase 13 now adds:
 - secret clearing from the operator workspace without deleting the provider record
 - Gemini and OpenRouter as first-class API-key presets alongside OpenAI, Anthropic, Workers AI, Ollama, and custom OpenAI-compatible routes
 
+Phase 14 now adds:
+
+- `@edgeintel/intelligence-rules` as the shared hosting/provider canonicalization layer
+- stronger DNS, edge, and origin attribution guardrails in the Worker scan summary
+- a first-class commercial brief endpoint at `/api/scans/:scanRunId/commercial-brief`
+- export v1.6 with commercial brief content embedded into Markdown, JSON, and API payload outputs
+
+Phase 15 now adds:
+
+- the canonical demo script in [docs/demo-script.md](./docs/demo-script.md)
+- the canonical demo domain mix in [docs/demo-domain-set.md](./docs/demo-domain-set.md)
+- the architecture narrative in [docs/architecture-story.md](./docs/architecture-story.md)
+- the final visual QA checklist in [docs/visual-qa-checklist.md](./docs/visual-qa-checklist.md)
+
 ## Current Scope
 
 This is the phase-0/1 implementation slice:
@@ -263,6 +287,13 @@ For the local-model setup flow, start with
 and [packages/connector-core/README.md](./packages/connector-core/README.md).
 
 UI direction prototypes for Phase 7 live in [docs/mockups/README.md](./docs/mockups/README.md).
+
+Interview/demo assets now live in:
+
+- [docs/demo-script.md](./docs/demo-script.md)
+- [docs/demo-domain-set.md](./docs/demo-domain-set.md)
+- [docs/architecture-story.md](./docs/architecture-story.md)
+- [docs/visual-qa-checklist.md](./docs/visual-qa-checklist.md)
 
 The repo wiki Home page is now available in the GitHub wiki and should become
 the canonical operator/setup guide as later phases land.

@@ -133,6 +133,62 @@ export interface ProviderSettingView {
   updatedAt: string;
 }
 
+export interface ProviderSignalView {
+  provider: string | null;
+  confidence: number;
+  evidence: string[];
+  category?: string | null;
+  methods?: string[];
+  providerType?: "cloud" | "shared" | "dedicated" | "unknown";
+  liveDashboard?: boolean;
+}
+
+export interface CommercialScorecard {
+  score: number;
+  status: "strong" | "moderate" | "weak";
+  summary: string;
+}
+
+export interface CommercialMotion {
+  productCode: string;
+  title: string;
+  reason: string;
+  priority: "critical" | "high" | "medium" | "low";
+  phase: 1 | 2 | 3 | 4;
+  evidenceRefs: string[];
+}
+
+export interface CommercialBriefView {
+  domain: string;
+  generatedAt: string;
+  posture: {
+    finalUrl: string | null;
+    dnsProvider: ProviderSignalView;
+    edgeProvider: ProviderSignalView;
+    wafProvider: ProviderSignalView;
+    originProvider: ProviderSignalView | null;
+    authSurfaceDetected: boolean;
+    apiSurfaceDetected: boolean;
+    missingSecurityHeaders: string[];
+  };
+  cloudflareFit: CommercialScorecard;
+  accessHardening: CommercialScorecard;
+  latencyOpportunity: CommercialScorecard;
+  resilienceOpportunity: CommercialScorecard;
+  originExposure: {
+    risk: "low" | "medium" | "high";
+    confidence: number;
+    summary: string;
+    hints: string[];
+  };
+  whyNow: string[];
+  customerNarrative: string;
+  operatorNarrative: string;
+  migrationNarrative: string;
+  expansionCandidates: CommercialMotion[];
+  markdown: string;
+}
+
 export interface TunnelRecordView {
   id: string;
   providerSettingId: string | null;

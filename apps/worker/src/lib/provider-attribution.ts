@@ -1,76 +1,10 @@
+import {
+  detectCanonicalProvider,
+  normalizeHostingProviderLabel,
+} from "@edgeintel/intelligence-rules";
 import type { DnsProfile, HttpProbe, ProviderSignal, ScanSummary } from "../types";
 
-interface ProviderPattern {
-  provider: string;
-  matchers: RegExp[];
-}
-
-const DNS_PATTERNS: ProviderPattern[] = [
-  {
-    provider: "Cloudflare",
-    matchers: [/\.ns\.cloudflare\.com$/i],
-  },
-  {
-    provider: "AWS Route 53",
-    matchers: [/\.awsdns-\d+\./i],
-  },
-  {
-    provider: "Azure DNS",
-    matchers: [/\.azure-dns\./i],
-  },
-  {
-    provider: "Vercel DNS",
-    matchers: [/\.vercel-dns\.com$/i],
-  },
-  {
-    provider: "DigitalOcean DNS",
-    matchers: [/\.digitalocean\.com$/i],
-  },
-];
-
-const EDGE_PATTERNS: Array<{
-  provider: string;
-  headerKeys: string[];
-  serverMatchers: RegExp[];
-}> = [
-  {
-    provider: "Cloudflare",
-    headerKeys: ["cf-ray", "cf-cache-status"],
-    serverMatchers: [/cloudflare/i],
-  },
-  {
-    provider: "Fastly",
-    headerKeys: ["x-served-by", "x-cache-hits"],
-    serverMatchers: [/fastly/i],
-  },
-  {
-    provider: "Akamai",
-    headerKeys: ["x-akamai", "akamai-origin-hop"],
-    serverMatchers: [/akamai/i],
-  },
-  {
-    provider: "Vercel",
-    headerKeys: ["x-vercel-cache", "x-vercel-id"],
-    serverMatchers: [/vercel/i],
-  },
-];
-
-function detectProvider(
-  values: string[],
-  patterns: ProviderPattern[],
-): ProviderSignal {
-  for (const pattern of patterns) {
-    const matched = values.filter((value) =>
-      pattern.matchers.some((matcher) => matcher.test(value)),
-    );
-    if (matched.length > 0) {
-      return {
-        provider: pattern.provider,
-        confidence: Math.min(95, 60 + matched.length * 12),
-        evidence: matched.slice(0, 4),
-      };
-    }
-  }
+function emptySignal(): ProviderSignal {
   return {
     provider: null,
     confidence: 0,
@@ -78,48 +12,154 @@ function detectProvider(
   };
 }
 
-export function buildScanSummary(domain: string, dns: DnsProfile, http: HttpProbe): ScanSummary {
-  const nameservers = dns.nameservers.map((record) => record.data);
-  const dnsProvider = detectProvider(nameservers, DNS_PATTERNS);
+function signalFromDetection(
+  detection: ReturnType<typeof detectCanonicalProvider>,
+): ProviderSignal {
+  if (!detection.provider) {
+    return emptySignal();
+  }
 
-  const serverHeader = http.headers.server ? [http.headers.server] : [];
-  const edgeSignals = EDGE_PATTERNS
-    .map((pattern) => {
-      const headerMatches = pattern.headerKeys.filter((key) => Boolean(http.headers[key]));
-      const serverMatches = serverHeader.filter((value) =>
-        pattern.serverMatchers.some((matcher) => matcher.test(value)),
-      );
-      if (headerMatches.length === 0 && serverMatches.length === 0) return null;
-      return {
-        provider: pattern.provider,
-        confidence: Math.min(
-          96,
-          62 + headerMatches.length * 14 + serverMatches.length * 10,
-        ),
-        evidence: [...headerMatches, ...serverMatches],
-      };
-    })
-    .filter(Boolean) as ProviderSignal[];
+  return {
+    provider: detection.provider,
+    confidence: detection.confidence,
+    evidence: detection.evidence,
+    category: detection.category,
+    methods: detection.methods,
+    providerType: detection.type,
+    liveDashboard: detection.liveDashboard,
+  };
+}
 
-  const edgeProvider =
-    edgeSignals.sort((left, right) => right.confidence - left.confidence)[0] ?? {
-      provider: null,
-      confidence: 0,
-      evidence: [],
+function normalizeOriginHints(dns: DnsProfile, http: HttpProbe): string[] {
+  return [
+    http.headers.server,
+    http.headers["x-powered-by"],
+    http.headers.via,
+    ...dns.cname.map((record) => record.data),
+  ].filter((value): value is string => Boolean(value && value.trim()));
+}
+
+function isRegistrarStyleNameserverOnly(signal: ProviderSignal): boolean {
+  const provider = normalizeHostingProviderLabel(signal.provider);
+  const category = signal.category?.toLowerCase() || "";
+  const methods = signal.methods || [];
+
+  if (!provider || methods.length !== 1 || methods[0] !== "nameserver") {
+    return false;
+  }
+
+  return (
+    category.includes("shared") ||
+    provider === "GoDaddy" ||
+    provider === "Bluehost" ||
+    provider === "HostGator" ||
+    provider === "Namecheap"
+  );
+}
+
+function detectDnsProvider(dns: DnsProfile): ProviderSignal {
+  return signalFromDetection(
+    detectCanonicalProvider({
+      nameservers: dns.nameservers.map((record) => record.data),
+    }),
+  );
+}
+
+function detectEdgeProvider(dns: DnsProfile, http: HttpProbe): ProviderSignal {
+  const detection = signalFromDetection(
+    detectCanonicalProvider({
+      nameservers: dns.nameservers.map((record) => record.data),
+      headerKeys: Object.keys(http.headers),
+      headerValues: Object.entries(http.headers).map(
+        ([key, value]) => `${key}: ${value}`,
+      ),
+      hintValues: [...dns.cname.map((record) => record.data), http.headers.server].filter(
+        (value): value is string => Boolean(value),
+      ),
+    }),
+  );
+
+  if (!detection.provider) {
+    return emptySignal();
+  }
+
+  if (detection.methods?.every((method) => method === "nameserver")) {
+    return emptySignal();
+  }
+
+  return detection;
+}
+
+function detectWafProvider(edgeProvider: ProviderSignal, http: HttpProbe): ProviderSignal {
+  const headerKeys = Object.keys(http.headers);
+  if (
+    headerKeys.includes("cf-ray") ||
+    headerKeys.includes("cf-cache-status") ||
+    edgeProvider.provider === "Cloudflare"
+  ) {
+    return {
+      provider: "Cloudflare",
+      confidence: Math.max(edgeProvider.confidence, 88),
+      evidence: ["Cloudflare edge and cache headers were observed."],
+      category: "CDN/DNS",
+      methods: ["header"],
+      providerType: "cloud",
+      liveDashboard: true,
     };
+  }
 
-  const wafProvider =
-    http.headers["cf-ray"] || http.headers["cf-cache-status"]
-      ? {
-          provider: "Cloudflare",
-          confidence: 88,
-          evidence: ["cf-ray/cf-cache-status headers observed"],
-        }
-      : {
-          provider: null,
-          confidence: 0,
-          evidence: [],
-        };
+  if (headerKeys.includes("x-akamai") || headerKeys.includes("akamai-origin-hop")) {
+    return {
+      provider: "Akamai",
+      confidence: 84,
+      evidence: ["Akamai request headers were observed."],
+      category: "CDN/DNS",
+      methods: ["header"],
+      providerType: "cloud",
+      liveDashboard: false,
+    };
+  }
+
+  if (headerKeys.includes("x-served-by") || headerKeys.includes("x-fastly-request-id")) {
+    return {
+      provider: "Fastly",
+      confidence: 82,
+      evidence: ["Fastly edge headers were observed."],
+      category: "CDN/DNS",
+      methods: ["header"],
+      providerType: "cloud",
+      liveDashboard: false,
+    };
+  }
+
+  return emptySignal();
+}
+
+function detectOriginProvider(dns: DnsProfile, http: HttpProbe): ProviderSignal {
+  const originHints = normalizeOriginHints(dns, http);
+  const detection = signalFromDetection(
+    detectCanonicalProvider({
+      headerValues: originHints.map((value) => `hint: ${value}`),
+      hintValues: originHints,
+    }),
+  );
+
+  if (!detection.provider || detection.confidence < 62) {
+    return emptySignal();
+  }
+
+  if (isRegistrarStyleNameserverOnly(detection)) {
+    return emptySignal();
+  }
+
+  return detection;
+}
+
+export function buildScanSummary(domain: string, dns: DnsProfile, http: HttpProbe): ScanSummary {
+  const dnsProvider = detectDnsProvider(dns);
+  const edgeProvider = detectEdgeProvider(dns, http);
+  const wafProvider = detectWafProvider(edgeProvider, http);
+  const originProvider = detectOriginProvider(dns, http);
 
   const missingSecurityHeaders = [
     "strict-transport-security",
@@ -134,11 +174,8 @@ export function buildScanSummary(domain: string, dns: DnsProfile, http: HttpProb
     dnsProvider,
     edgeProvider,
     wafProvider,
-    originHints: [
-      http.headers.server,
-      http.headers["x-powered-by"],
-      ...dns.cname.map((record) => record.data),
-    ].filter(Boolean) as string[],
+    originProvider,
+    originHints: normalizeOriginHints(dns, http),
     apiSurfaceDetected: http.apiHints.length > 0,
     authSurfaceDetected: http.authHints.length > 0,
     cacheSignals: [http.headers["cache-control"], http.headers["cf-cache-status"]].filter(

@@ -259,6 +259,10 @@ export interface ProviderSignal {
   provider: string | null;
   confidence: number;
   evidence: string[];
+  category?: string | null;
+  methods?: string[];
+  providerType?: "cloud" | "shared" | "dedicated" | "unknown";
+  liveDashboard?: boolean;
 }
 
 export interface ScanSummary {
@@ -266,12 +270,59 @@ export interface ScanSummary {
   dnsProvider: ProviderSignal;
   edgeProvider: ProviderSignal;
   wafProvider: ProviderSignal;
+  originProvider?: ProviderSignal;
   originHints: string[];
   apiSurfaceDetected: boolean;
   authSurfaceDetected: boolean;
   cacheSignals: string[];
   missingSecurityHeaders: string[];
   finalUrl: string | null;
+}
+
+export interface CommercialScorecard {
+  score: number;
+  status: "strong" | "moderate" | "weak";
+  summary: string;
+}
+
+export interface CommercialMotion {
+  productCode: string;
+  title: string;
+  reason: string;
+  priority: RecommendationPriority;
+  phase: RecommendationPhase;
+  evidenceRefs: string[];
+}
+
+export interface CommercialBriefView {
+  domain: string;
+  generatedAt: string;
+  posture: {
+    finalUrl: string | null;
+    dnsProvider: ProviderSignal;
+    edgeProvider: ProviderSignal;
+    wafProvider: ProviderSignal;
+    originProvider: ProviderSignal | null;
+    authSurfaceDetected: boolean;
+    apiSurfaceDetected: boolean;
+    missingSecurityHeaders: string[];
+  };
+  cloudflareFit: CommercialScorecard;
+  accessHardening: CommercialScorecard;
+  latencyOpportunity: CommercialScorecard;
+  resilienceOpportunity: CommercialScorecard;
+  originExposure: {
+    risk: "low" | "medium" | "high";
+    confidence: number;
+    summary: string;
+    hints: string[];
+  };
+  whyNow: string[];
+  customerNarrative: string;
+  operatorNarrative: string;
+  migrationNarrative: string;
+  expansionCandidates: CommercialMotion[];
+  markdown: string;
 }
 
 export interface ScanModuleResult<T> {

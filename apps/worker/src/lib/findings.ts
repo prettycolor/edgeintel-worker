@@ -104,6 +104,23 @@ export function deriveFindings(
     );
   }
 
+  if (summary.originProvider?.provider && summary.originProvider.confidence >= 62) {
+    findings.push(
+      finding({
+        category: "origin",
+        severity: "medium",
+        code: "ORIGIN_PROVIDER_VISIBLE",
+        title: "Origin infrastructure appears attributable from the public surface",
+        detail:
+          `Public headers or DNS hints suggest the workload is still exposing origin details that point toward ${summary.originProvider.provider}. That weakens the edge-isolation story and strengthens the case for Cloudflare proxying and shielding.`,
+        evidence: {
+          originProvider: summary.originProvider,
+          originHints: summary.originHints,
+        },
+      }),
+    );
+  }
+
   for (const header of summary.missingSecurityHeaders) {
     findings.push(
       finding({

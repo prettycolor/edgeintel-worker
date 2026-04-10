@@ -21,8 +21,17 @@ const run: PersistedScanRun = {
     edgeProvider: { provider: "Fastly" },
     dnsProvider: { provider: "AWS Route 53" },
     wafProvider: { provider: null },
+    originProvider: { provider: "AWS", confidence: 82, evidence: ["hint:ec2.amazonaws.com"] },
+    originHints: ["ec2.amazonaws.com"],
+    apiSurfaceDetected: false,
+    authSurfaceDetected: true,
+    cacheSignals: [],
+    missingSecurityHeaders: ["strict-transport-security"],
+    finalUrl: "https://example.com/login",
   }),
   rawResultJson: JSON.stringify({
+    dns: { a: [{ data: "192.0.2.5" }], aaaa: [] },
+    http: { redirectChain: [{}, {}, {}], staticAssetHints: ["/app.js"] },
     modules: {
       dns: { ok: true },
       http: { ok: true },
@@ -127,6 +136,7 @@ describe("exports", () => {
 
     expect(markdown).toContain("## Executive Summary");
     expect(markdown).toContain("## Detected Posture");
+    expect(markdown).toContain("## Commercial Brief");
     expect(markdown).toContain("## Findings By Severity");
     expect(markdown).toContain("## Recommended Cloudflare Products");
     expect(markdown).toContain("## Rollout Order");
@@ -138,10 +148,12 @@ describe("exports", () => {
   it("renders grouped API payload exports with manifest metadata", () => {
     const payload = JSON.parse(renderApiPayloadExport(context)) as {
       manifest: { schemaVersion: string };
+      commercialBrief: { cloudflareFit: { score: number } };
       recommendationsByProduct: Record<string, unknown>;
     };
 
-    expect(payload.manifest.schemaVersion).toBe("edgeintel.export.v1.5");
+    expect(payload.manifest.schemaVersion).toBe("edgeintel.export.v1.6");
+    expect(payload.commercialBrief.cloudflareFit.score).toBeGreaterThan(0);
     expect(payload.recommendationsByProduct.WAF).toBeDefined();
     expect(payload.recommendationsByProduct.TURNSTILE).toBeDefined();
   });
@@ -149,6 +161,7 @@ describe("exports", () => {
   it("renders json exports with manifest and normalized recommendation fields", () => {
     const payload = JSON.parse(renderJsonExport(context)) as {
       manifest: { scanRunId: string };
+      commercialBrief: { originExposure: { risk: string } };
       recommendations: Array<{
         blockedBy: string[];
         evidenceRefs: string[];
@@ -157,6 +170,7 @@ describe("exports", () => {
     };
 
     expect(payload.manifest.scanRunId).toBe("run-1");
+    expect(payload.commercialBrief.originExposure.risk).toBeDefined();
     expect(payload.recommendations[0]?.blockedBy).toContain(
       "cloudflare_proxy_adoption",
     );

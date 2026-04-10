@@ -73,6 +73,7 @@ import {
   renderMarkdownExport,
   renderTerraformExport,
 } from "./lib/exports";
+import { buildCommercialBrief } from "./lib/commercial-brief";
 import {
   buildAiBriefArtifactKey,
   generateAiBrief,
@@ -476,6 +477,27 @@ async function handleGetScan(env: Env, scanRunId: string): Promise<Response> {
   if (!scanContext) return notFound("Scan run not found.");
 
   return jsonResponse(serializeScanContext(scanContext));
+}
+
+async function handleGetCommercialBrief(
+  request: Request,
+  env: Env,
+  scanRunId: string,
+): Promise<Response> {
+  const scanContext = await getScanContext(env, scanRunId);
+  if (!scanContext) return notFound("Scan run not found.");
+
+  const brief = buildCommercialBrief(scanContext);
+  if (new URL(request.url).searchParams.get("format") === "markdown") {
+    return new Response(brief.markdown, {
+      headers: {
+        "content-type": "text/markdown; charset=utf-8",
+        "cache-control": "no-store",
+      },
+    });
+  }
+
+  return jsonResponse({ brief });
 }
 
 async function handleDomainHistory(env: Env, domainParam: string): Promise<Response> {
@@ -1705,7 +1727,7 @@ async function handleCreateExport(
     objectKey,
     contentType,
     {
-      schemaVersion: "edgeintel.export.v1.5",
+      schemaVersion: "edgeintel.export.v1.6",
       generatedAt: new Date().toISOString(),
       scanRunId,
       domain: scanContext.run.domain,
@@ -1978,6 +2000,10 @@ export default class EdgeIntelWorker extends WorkerEntrypoint<Env> {
 
     if (request.method === "GET" && /^\/api\/scans\/[^/]+$/.test(path)) {
       return handleGetScan(this.env, path.split("/")[3]);
+    }
+
+    if (request.method === "GET" && /^\/api\/scans\/[^/]+\/commercial-brief$/.test(path)) {
+      return handleGetCommercialBrief(request, this.env, path.split("/")[3]);
     }
 
     if (request.method === "POST" && /^\/api\/scans\/[^/]+\/ai-brief$/.test(path)) {

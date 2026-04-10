@@ -28,6 +28,7 @@
     "wrangler": "^4.81.1"
   },
   "dependencies": {
+    "@edgeintel/intelligence-rules": "*",
     "jose": "^6.2.2"
   }
 }

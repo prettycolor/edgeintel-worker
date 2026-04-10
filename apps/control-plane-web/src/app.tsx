@@ -23,12 +23,12 @@ const pillars = [
   {
     title: "Worker Control Plane",
     detail:
-      "Keeps orchestration, secrets, tunnel provisioning, and Cloudflare-side diagnostics in one place.",
+      "Keeps scans, secrets, tunnel provisioning, observability, and commercial outputs in one Cloudflare-native control plane.",
   },
   {
     title: "React Operator Surface",
     detail:
-      "Replaces the Worker-served HTML strings with a maintainable app shell that can grow into the private product workspace.",
+      "Provides the long-term private operator workspace for providers, tunnels, diagnostics, and customer-facing commercial narratives.",
   },
   {
     title: "Desktop Connector",
@@ -38,10 +38,9 @@ const pillars = [
 ];
 
 const milestones = [
-  "Phase 9: Access-first auth and scoped bootstrap delivery",
-  "Phase 10: Zone discovery and hostname validation",
-  "Phase 11: tunnel event history, drift, and failure deltas",
-  "Phase 12: packaged macOS tray app with guided onboarding",
+  "Phase 13: provider capability catalog and auth-strategy-aware credential UX",
+  "Phase 14: hosting intelligence uplift and commercial brief output",
+  "Phase 15: demo script, architecture story, and interview packaging",
 ];
 
 export function App() {
@@ -69,10 +68,10 @@ export function App() {
         </div>
         <div className="sidebar-card">
           <p className="eyebrow">Workspace Mode</p>
-          <strong>Monorepo uplift active</strong>
+          <strong>Implementation roadmap complete</strong>
           <span>
-            The Worker stays authoritative while the React app and desktop
-            connector grow beside it.
+            The Worker remains authoritative while the React app and desktop
+            connector package the system into an operator-grade product.
           </span>
         </div>
       </aside>
@@ -80,11 +79,11 @@ export function App() {
       <section className="main">
         <header className="hero">
           <div>
-            <p className="eyebrow">Phase 8</p>
-            <h2>Private app shell, shared contracts, and desktop foundations.</h2>
+            <p className="eyebrow">Phase 15</p>
+            <h2>Commercial output, control plane, and demo-ready architecture.</h2>
             <p className="lede">
-              This package is the future operator workspace for provider
-              settings, tunnels, observability, and SE-grade commercial output.
+              This package is the private operator workspace for provider
+              settings, tunnels, observability, and SE-grade Cloudflare motions.
             </p>
           </div>
           <div className="hero-metrics">
@@ -106,11 +105,11 @@ export function App() {
         <section className="grid">
           <article className="panel panel-dark">
             <p className="eyebrow">Architecture pillar</p>
-            <h3>What this app replaces</h3>
+            <h3>What this app now carries</h3>
             <p>
-              The current Worker-served HTML surfaces were correct for proving
-              the control plane. This React workspace is the maintainable path
-              for the long-term private operator experience.
+              The Worker-served HTML surfaces proved the control plane. This
+              React workspace is the long-term surface for provider onboarding,
+              tunnel observability, and commercial Cloudflare fit reporting.
             </p>
           </article>
 

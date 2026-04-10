@@ -57,6 +57,15 @@ The goal of the next buildout is not to re-architect from scratch. It is to hard
   - `/app/providers` now shows provider capability notes, supported auth paths, secret health summaries, and secret-clearing controls
   - provider tests now treat unsupported auth modes as explicit warnings instead of pretending every provider supports the same flow
   - Gemini and OpenRouter are now first-class API-key presets beside OpenAI, Anthropic, Workers AI, Ollama, and custom OpenAI-compatible routes
+- Phase 14 commercial output and hosting intelligence uplift is implemented:
+  - `@edgeintel/intelligence-rules` now carries worker-safe canonical hosting/provider rules extracted from the hostinginfo intelligence layer
+  - scan summaries now separate DNS, edge, WAF, and origin provider attribution more deliberately
+  - `/api/scans/:scanRunId/commercial-brief` exposes Cloudflare fit, access-hardening, latency/resilience, and expansion-motion summaries
+  - export v1.6 now embeds the commercial brief into Markdown, JSON, and API payload outputs
+- Phase 15 demo and interview layer is implemented:
+  - the repo now includes a canonical demo script, demo domain set, architecture story, and visual QA checklist
+  - the React operator-shell scaffold now reflects the completed control-plane and commercial-output story
+  - the remaining work is now release packaging and future expansions rather than missing core product layers
 
 ## Execution Protocol
 
