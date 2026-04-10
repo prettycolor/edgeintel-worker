@@ -569,6 +569,7 @@ const TUNNEL_APP_SCRIPT = String.raw`
     tunnels: [],
     selectedId: null,
     selectedDetails: null,
+    selectedObservability: null,
     latestPairingSecret: null,
     hostnameValidation: null,
     saving: false,
@@ -587,6 +588,8 @@ const TUNNEL_APP_SCRIPT = String.raw`
     validationPanel: document.getElementById("route-validation"),
     diagnosticsMeta: document.getElementById("route-diagnostics-meta"),
     diagnostics: document.getElementById("route-diagnostics"),
+    observabilityMeta: document.getElementById("route-observability-meta"),
+    observability: document.getElementById("route-observability"),
     pairingMeta: document.getElementById("route-pairing-meta"),
     pairingList: document.getElementById("route-pairing-list"),
     pairingOutput: document.getElementById("route-pairing-output"),
@@ -674,6 +677,19 @@ const TUNNEL_APP_SCRIPT = String.raw`
     const payload = await response.json();
     if (!response.ok) throw new Error(payload?.error || "Failed to load tunnel details.");
     state.selectedDetails = payload;
+  }
+
+  async function loadTunnelObservability(tunnelId) {
+    if (!tunnelId) {
+      state.selectedObservability = null;
+      return;
+    }
+    const response = await fetch(config.tunnelsEndpoint + "/" + encodeURIComponent(tunnelId) + "/observability", {
+      method: "GET",
+    });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload?.error || "Failed to load tunnel observability.");
+    state.selectedObservability = payload.observability || null;
   }
 
   function renderStats() {
@@ -902,6 +918,57 @@ const TUNNEL_APP_SCRIPT = String.raw`
     ui.pairingOutput.textContent = JSON.stringify(currentSecret, null, 2);
   }
 
+  function renderObservability(entry) {
+    const observability = state.selectedObservability;
+    if (!entry || !observability) {
+      ui.observabilityMeta.textContent = "Observability loads after a route is selected.";
+      ui.observability.innerHTML = '<div class="empty-state"><strong>No observability loaded.</strong><div class="muted" style="margin-top:6px">Select a route to inspect event history, version drift, and the last known good runtime test.</div></div>';
+      return;
+    }
+
+    const events = Array.isArray(observability.events) ? observability.events : [];
+    const latestTest = observability.latestTest || null;
+    const lastKnownGood = observability.lastKnownGood || null;
+    const drift = observability.versionDrift || { changed: false, current: null, previous: null };
+    const failureDelta = observability.failureDelta || null;
+
+    ui.observabilityMeta.textContent = lastKnownGood
+      ? "Last known good " + relativeTimestamp(lastKnownGood.testedAt)
+      : "No passing runtime test captured yet";
+
+    const summaryCards = [
+      {
+        title: "Latest test",
+        detail: latestTest ? latestTest.message : "No test captured",
+        helper: latestTest ? relativeTimestamp(latestTest.testedAt) : "Run a tunnel test to establish a baseline.",
+      },
+      {
+        title: "Version drift",
+        detail: drift.changed ? (drift.previous + " -> " + drift.current) : (drift.current || "Stable"),
+        helper: drift.changed ? "Connector runtime version changed since the previous heartbeat." : "No connector runtime drift detected.",
+      },
+      {
+        title: "Failure delta",
+        detail: failureDelta ? failureDelta.summary : "No regression against the last known good test.",
+        helper: failureDelta && typeof failureDelta.latencyDeltaMs === "number"
+          ? "Latency delta " + failureDelta.latencyDeltaMs + "ms"
+          : "Healthy routes do not emit a failure delta.",
+      },
+    ];
+
+    const eventMarkup = events.length
+      ? events.slice(0, 5).map((event) =>
+          '<div class="diagnostic-item"><strong>' + escapeHtml(event.summary) + '</strong><div>' + escapeHtml(event.kind) + '</div><div class="muted" style="margin-top:6px">' + escapeHtml(relativeTimestamp(event.createdAt)) + '</div></div>'
+        ).join("")
+      : '<div class="empty-state"><strong>No tunnel events recorded yet.</strong><div class="muted" style="margin-top:6px">Provision, pair, test, or reconnect the route to build an event timeline.</div></div>';
+
+    ui.observability.innerHTML = summaryCards
+      .map((card) =>
+        '<div class="diagnostic-item"><strong>' + escapeHtml(card.title) + '</strong><div>' + escapeHtml(card.detail) + '</div><div class="muted" style="margin-top:6px">' + escapeHtml(card.helper) + '</div></div>'
+      )
+      .join("") + eventMarkup;
+  }
+
   function collectPayload() {
     return {
       providerSettingId: ui.routeForm.elements.providerSettingId.value || null,
@@ -916,6 +983,7 @@ const TUNNEL_APP_SCRIPT = String.raw`
   async function refresh(preferredId) {
     await Promise.all([loadProviders(), loadTunnels(preferredId), loadZones()]);
     await loadTunnelDetails(state.selectedId);
+    await loadTunnelObservability(state.selectedId);
     const entry = findSelected();
     if (!entry || state.latestPairingSecret?.tunnelId !== entry.id) {
       state.latestPairingSecret = null;
@@ -940,6 +1008,7 @@ const TUNNEL_APP_SCRIPT = String.raw`
     });
     renderStepper(entry);
     renderDiagnostics(entry);
+    renderObservability(entry);
     renderPairings(entry);
   }
 
@@ -1064,6 +1133,7 @@ const TUNNEL_APP_SCRIPT = String.raw`
     if (!routeId) return;
     state.selectedId = routeId;
     await loadTunnelDetails(routeId);
+    await loadTunnelObservability(routeId);
     const entry = findSelected();
     if (state.latestPairingSecret?.tunnelId !== routeId) {
       state.latestPairingSecret = null;
@@ -1086,6 +1156,7 @@ const TUNNEL_APP_SCRIPT = String.raw`
     });
     renderStepper(entry);
     renderDiagnostics(entry);
+    renderObservability(entry);
     renderPairings(entry);
   });
 
@@ -1107,12 +1178,14 @@ const TUNNEL_APP_SCRIPT = String.raw`
   ui.resetButton.addEventListener("click", async () => {
     state.selectedId = null;
     state.selectedDetails = null;
+    state.selectedObservability = null;
     state.latestPairingSecret = null;
     state.hostnameValidation = null;
     populateForm(null);
     renderValidation();
     renderStepper(null);
     renderDiagnostics(null);
+    renderObservability(null);
     renderPairings(null);
     setNotice(null);
   });
@@ -1257,6 +1330,18 @@ export function renderTunnelControlPlaneApp(config: TunnelAppConfig): string {
                   <h3 style="margin-top:10px">Route health and runtime proof</h3>
                   <div id="route-diagnostics-meta" class="muted" style="margin-top:10px">Awaiting route selection</div>
                   <div id="route-diagnostics" class="diagnostic-list" style="margin-top:14px"></div>
+                </div>
+
+                <div class="surface">
+                  <div class="eyebrow">Observability</div>
+                  <h3 style="margin-top:10px">Event history and drift</h3>
+                  <div id="route-observability-meta" class="muted" style="margin-top:10px">Observability loads after a route is selected.</div>
+                  <div id="route-observability" class="diagnostic-list" style="margin-top:14px">
+                    <div class="empty-state">
+                      <strong>No observability loaded.</strong>
+                      <div class="muted" style="margin-top:6px">Select a route to inspect event history, version drift, and the last known good runtime test.</div>
+                    </div>
+                  </div>
                 </div>
               </div>
 

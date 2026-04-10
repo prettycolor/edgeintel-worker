@@ -85,6 +85,7 @@ Use the tunnel workspace `Run test` action. EdgeIntel will:
 - inspect current Cloudflare connection state
 - probe the public hostname
 - persist the result on the tunnel record
+- compare failures against the last known good test when one exists
 
 ## What The Wizard Actually Proves
 
@@ -103,6 +104,7 @@ When this path is green, the system proves:
 - use `Run test` after every route or token change
 - treat the connector heartbeat as the source of truth for machine-side status
 - create a fresh pairing after any bootstrap rotation
+- use the observability panel to spot connector version drift and failure deltas quickly
 
 ## Follow-On Docs
 

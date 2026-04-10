@@ -19,6 +19,7 @@ describe("tunnel control plane app shell", () => {
     expect(markup).toContain('id="pair-route"');
     expect(markup).toContain('id="route-pairing-output"');
     expect(markup).toContain('id="route-validation"');
+    expect(markup).toContain('id="route-observability"');
     expect(markup).toContain("Scoped handoff to the local agent");
     expect(markup).toContain("Rotate bootstrap");
     expect(markup).toContain("Save route");

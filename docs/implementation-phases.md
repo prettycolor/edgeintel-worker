@@ -40,6 +40,11 @@ The goal of the next buildout is not to re-architect from scratch. It is to hard
   - `/api/hostnames/validate` auto-matches hostnames to the best zone suffix
   - the tunnel workspace now uses discovered zones instead of manual zone-ID-only input
   - inline DNS conflict checks run before the operator provisions a route
+- Phase 11 tunnel observability is implemented:
+  - `/api/tunnels/:id/events` exposes a durable event timeline
+  - `/api/tunnels/:id/observability` exposes recent tests, last-known-good, version drift, and failure deltas
+  - tunnel actions now emit stored events instead of only mutating the latest row state
+  - the tunnel workspace surfaces event history and regression context inline
 
 ## Execution Protocol
 

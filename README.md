@@ -22,6 +22,9 @@ Cloudflare-native domain posture and remediation engine for the `hostingtool.dev
   runtime testing, scoped connector pairing, and heartbeat status
 - `GET /api/zones` and `POST /api/hostnames/validate` for Cloudflare zone
   discovery, suffix-based hostname matching, and DNS conflict preflight
+- `GET /api/tunnels/:id/events` and `GET /api/tunnels/:id/observability`
+  for tunnel event history, recent test runs, last-known-good state, and
+  drift/failure summaries
 - `GET /api/session`, `POST /api/pairings`, and
   `POST /api/pairings/:id/exchange` for Access-authenticated operator session
   inspection plus one-time connector bootstrap exchange
@@ -75,6 +78,8 @@ Cloudflare-native domain posture and remediation engine for the `hostingtool.dev
   - one-time pairing sessions so raw tunnel bootstrap is no longer returned by
     ordinary tunnel detail APIs
   - connector heartbeat updates for machine-side status
+  - persisted tunnel event history and test-run history for diagnostics
+  - last-known-good and failure-delta summaries in the tunnel workspace
 - Reference connector runtime with:
   - one-time pairing exchange from the Worker API
   - `cloudflared` validation and launch

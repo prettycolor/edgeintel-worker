@@ -9,7 +9,9 @@ import type {
   PersistedProviderSetting,
   PersistedRecommendation,
   PersistedScanRun,
+  PersistedTunnelEvent,
   PersistedTunnelRecord,
+  PersistedTunnelTestRun,
   ProviderConnectionTestResult,
   Recommendation,
   ScanResultBundle,
@@ -136,6 +138,33 @@ function toPairingSession(
     metadataJson: String(row.metadata_json ?? "{}"),
     createdAt: String(row.created_at),
     updatedAt: String(row.updated_at),
+  };
+}
+
+function toTunnelEvent(
+  row: Record<string, unknown>,
+): PersistedTunnelEvent {
+  return {
+    id: String(row.id),
+    tunnelId: String(row.tunnel_id),
+    kind: String(row.kind),
+    level: row.level as PersistedTunnelEvent["level"],
+    summary: String(row.summary),
+    detailJson: String(row.detail_json ?? "{}"),
+    createdAt: String(row.created_at),
+  };
+}
+
+function toTunnelTestRun(
+  row: Record<string, unknown>,
+): PersistedTunnelTestRun {
+  return {
+    id: String(row.id),
+    tunnelId: String(row.tunnel_id),
+    status: row.status as PersistedTunnelTestRun["status"],
+    resultJson: String(row.result_json),
+    testedAt: String(row.tested_at),
+    createdAt: String(row.created_at),
   };
 }
 
@@ -1059,6 +1088,115 @@ export async function markPairingSessionSeen(
   )
     .bind(timestamp, metadataJson ?? null, timestamp, pairingId)
     .run();
+}
+
+export async function insertTunnelEvent(
+  env: Env,
+  input: {
+    tunnelId: string;
+    kind: string;
+    level: PersistedTunnelEvent["level"];
+    summary: string;
+    detailJson?: string;
+  },
+): Promise<string> {
+  const eventId = crypto.randomUUID();
+  const timestamp = nowIso();
+  await env.EDGE_DB.prepare(
+    `INSERT INTO tunnel_events (
+      id, tunnel_id, kind, level, summary, detail_json, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+  )
+    .bind(
+      eventId,
+      input.tunnelId,
+      input.kind,
+      input.level,
+      input.summary,
+      input.detailJson ?? "{}",
+      timestamp,
+    )
+    .run();
+  return eventId;
+}
+
+export async function listTunnelEvents(
+  env: Env,
+  tunnelId: string,
+  limit = 20,
+): Promise<PersistedTunnelEvent[]> {
+  const result = await env.EDGE_DB.prepare(
+    `SELECT *
+     FROM tunnel_events
+     WHERE tunnel_id = ?
+     ORDER BY created_at DESC
+     LIMIT ?`,
+  )
+    .bind(tunnelId, limit)
+    .all<Record<string, unknown>>();
+
+  return (result.results ?? []).map(toTunnelEvent);
+}
+
+export async function insertTunnelTestRun(
+  env: Env,
+  tunnelId: string,
+  result: TunnelConnectionTestResult,
+): Promise<string> {
+  const testRunId = crypto.randomUUID();
+  const createdAt = nowIso();
+  await env.EDGE_DB.prepare(
+    `INSERT INTO tunnel_test_runs (
+      id, tunnel_id, status, result_json, tested_at, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?)`,
+  )
+    .bind(
+      testRunId,
+      tunnelId,
+      result.status,
+      JSON.stringify(result),
+      result.testedAt,
+      createdAt,
+    )
+    .run();
+
+  return testRunId;
+}
+
+export async function listTunnelTestRuns(
+  env: Env,
+  tunnelId: string,
+  limit = 10,
+): Promise<PersistedTunnelTestRun[]> {
+  const result = await env.EDGE_DB.prepare(
+    `SELECT *
+     FROM tunnel_test_runs
+     WHERE tunnel_id = ?
+     ORDER BY tested_at DESC
+     LIMIT ?`,
+  )
+    .bind(tunnelId, limit)
+    .all<Record<string, unknown>>();
+
+  return (result.results ?? []).map(toTunnelTestRun);
+}
+
+export async function getLastKnownGoodTunnelTestRun(
+  env: Env,
+  tunnelId: string,
+): Promise<PersistedTunnelTestRun | null> {
+  const row = await env.EDGE_DB.prepare(
+    `SELECT *
+     FROM tunnel_test_runs
+     WHERE tunnel_id = ?
+       AND status = 'passed'
+     ORDER BY tested_at DESC
+     LIMIT 1`,
+  )
+    .bind(tunnelId)
+    .first<Record<string, unknown>>();
+
+  return row ? toTunnelTestRun(row) : null;
 }
 
 export async function listDomainHistory(

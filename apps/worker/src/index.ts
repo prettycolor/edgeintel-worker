@@ -18,6 +18,7 @@ import {
   getFindingsForRun,
   getJob,
   getLatestRunForDomain,
+  getLastKnownGoodTunnelTestRun,
   getPairingSession,
   getProviderSetting,
   getTunnelRecord,
@@ -26,8 +27,12 @@ import {
   getScanContext,
   getScanRun,
   insertArtifact,
+  insertTunnelEvent,
+  insertTunnelTestRun,
   listProviderSettings,
+  listTunnelEvents,
   listTunnelRecords,
+  listTunnelTestRuns,
   listDueDomainWatches,
   listDomainHistory,
   markRunFailed,
@@ -123,6 +128,7 @@ import type {
   TunnelSettingsRequestBody,
   TunnelHeartbeatRequestBody,
   TunnelTestRequestBody,
+  TunnelConnectionTestResult,
 } from "./types";
 import { EdgeIntelScanWorkflow } from "./workflows/scan-workflow";
 
@@ -215,7 +221,7 @@ function isOperatorControlPlaneRoute(request: Request, path: string): boolean {
     return true;
   }
 
-  if (/^\/api\/tunnels\/[^/]+\/(test|rotate-token)$/.test(path)) {
+  if (/^\/api\/tunnels\/[^/]+\/(test|rotate-token|events|observability)$/.test(path)) {
     return true;
   }
 
@@ -242,6 +248,92 @@ function buildPairingMetadata(
     ...safeJsonParse<Record<string, unknown>>(existingMetadataJson, {}),
     ...patch,
   });
+}
+
+function serializeTunnelEventRecord(event: {
+  id: string;
+  tunnelId: string;
+  kind: string;
+  level: "info" | "warning" | "error";
+  summary: string;
+  detailJson: string;
+  createdAt: string;
+}) {
+  return {
+    id: event.id,
+    tunnelId: event.tunnelId,
+    kind: event.kind,
+    level: event.level,
+    summary: event.summary,
+    detail: safeJsonParse<Record<string, unknown>>(event.detailJson, {}),
+    createdAt: event.createdAt,
+  };
+}
+
+function serializeTunnelTestRunRecord(testRun: {
+  id: string;
+  tunnelId: string;
+  status: "passed" | "failed" | "warning";
+  resultJson: string;
+  testedAt: string;
+  createdAt: string;
+}) {
+  return {
+    id: testRun.id,
+    tunnelId: testRun.tunnelId,
+    status: testRun.status,
+    result: safeJsonParse<TunnelConnectionTestResult | null>(testRun.resultJson, null),
+    testedAt: testRun.testedAt,
+    createdAt: testRun.createdAt,
+  };
+}
+
+function extractRuntimeStatus(result: TunnelConnectionTestResult | null): number | null {
+  const runtime =
+    result?.details?.runtime &&
+    typeof result.details.runtime === "object" &&
+    !Array.isArray(result.details.runtime)
+      ? (result.details.runtime as Record<string, unknown>)
+      : null;
+  return typeof runtime?.status === "number" ? runtime.status : null;
+}
+
+function buildTunnelFailureDelta(
+  latest: TunnelConnectionTestResult | null,
+  lastKnownGood: TunnelConnectionTestResult | null,
+) {
+  if (!latest || latest.status === "passed" || !lastKnownGood) {
+    return null;
+  }
+
+  const latestRuntimeStatus = extractRuntimeStatus(latest);
+  const lastKnownGoodRuntimeStatus = extractRuntimeStatus(lastKnownGood);
+  const latencyDeltaMs = latest.latencyMs - lastKnownGood.latencyMs;
+
+  return {
+    summary:
+      latestRuntimeStatus !== null && lastKnownGoodRuntimeStatus !== null
+        ? `Runtime status changed from ${lastKnownGoodRuntimeStatus} to ${latestRuntimeStatus}.`
+        : `Latest tunnel check regressed from the last known good run by ${latencyDeltaMs}ms.`,
+    latencyDeltaMs,
+    previousRuntimeStatus: lastKnownGoodRuntimeStatus,
+    currentRuntimeStatus: latestRuntimeStatus,
+  };
+}
+
+function buildVersionDrift(events: Array<ReturnType<typeof serializeTunnelEventRecord>>) {
+  const versions = events
+    .map((event) => event.detail.version)
+    .filter((value): value is string => typeof value === "string" && value.length > 0);
+
+  const current = versions[0] ?? null;
+  const previous = versions.find((value) => value !== current) ?? null;
+
+  return {
+    changed: Boolean(current && previous && current !== previous),
+    current,
+    previous,
+  };
 }
 
 async function handleCreateScan(request: Request, env: Env): Promise<Response> {
@@ -745,6 +837,54 @@ async function handleGetTunnel(env: Env, tunnelId: string): Promise<Response> {
   });
 }
 
+async function handleGetTunnelEvents(env: Env, tunnelId: string): Promise<Response> {
+  const tunnel = await getTunnelRecord(env, tunnelId);
+  if (!tunnel) return notFound("Tunnel record not found.");
+
+  const events = await listTunnelEvents(env, tunnelId, 25);
+  return jsonResponse({
+    tunnel: serializeTunnelRecord(tunnel),
+    events: events.map(serializeTunnelEventRecord),
+  });
+}
+
+async function handleGetTunnelObservability(
+  env: Env,
+  tunnelId: string,
+): Promise<Response> {
+  const tunnel = await getTunnelRecord(env, tunnelId);
+  if (!tunnel) return notFound("Tunnel record not found.");
+
+  const [events, testRuns, lastKnownGood] = await Promise.all([
+    listTunnelEvents(env, tunnelId, 25),
+    listTunnelTestRuns(env, tunnelId, 8),
+    getLastKnownGoodTunnelTestRun(env, tunnelId),
+  ]);
+
+  const serializedEvents = events.map(serializeTunnelEventRecord);
+  const serializedTests = testRuns.map(serializeTunnelTestRunRecord);
+  const latestTest =
+    serializedTests[0]?.result ??
+    safeJsonParse<TunnelConnectionTestResult | null>(tunnel.lastTestResultJson, null);
+  const lastKnownGoodResult = lastKnownGood
+    ? safeJsonParse<TunnelConnectionTestResult | null>(lastKnownGood.resultJson, null)
+    : null;
+
+  return jsonResponse({
+    tunnel: serializeTunnelRecord(tunnel),
+    observability: {
+      events: serializedEvents,
+      recentTests: serializedTests,
+      latestTest,
+      lastKnownGood: lastKnownGoodResult,
+      versionDrift: buildVersionDrift(
+        serializedEvents.filter((event) => event.kind === "connector.heartbeat"),
+      ),
+      failureDelta: buildTunnelFailureDelta(latestTest, lastKnownGoodResult),
+    },
+  });
+}
+
 async function handleCreateTunnel(
   request: Request,
   env: Env,
@@ -797,6 +937,18 @@ async function handleCreateTunnel(
         { status: 500 },
       );
     }
+
+    await insertTunnelEvent(env, {
+      tunnelId: created.id,
+      kind: "tunnel.created",
+      level: "info",
+      summary: `Provisioned ${created.publicHostname}`,
+      detailJson: JSON.stringify({
+        cloudflareZoneId: created.cloudflareZoneId,
+        accessProtected: created.accessProtected,
+        linkedProviderId: created.providerSettingId,
+      }),
+    }).catch(() => {});
 
     return jsonResponse(
       {
@@ -879,6 +1031,18 @@ async function handleUpdateTunnel(
       );
     }
 
+    await insertTunnelEvent(env, {
+      tunnelId: updated.id,
+      kind: "tunnel.updated",
+      level: "info",
+      summary: `Updated ${updated.publicHostname}`,
+      detailJson: JSON.stringify({
+        cloudflareZoneId: updated.cloudflareZoneId,
+        accessProtected: updated.accessProtected,
+        linkedProviderId: updated.providerSettingId,
+      }),
+    }).catch(() => {});
+
     return jsonResponse({
       tunnel: serializeTunnelRecord(updated),
     });
@@ -938,6 +1102,16 @@ async function handleTestTunnel(
 
     if (body.persistResult !== false) {
       await storeTunnelTestResult(env, tunnelId, result);
+      await Promise.all([
+        insertTunnelTestRun(env, tunnelId, result),
+        insertTunnelEvent(env, {
+        tunnelId,
+        kind: "tunnel.test",
+        level: result.status === "passed" ? "info" : result.status === "warning" ? "warning" : "error",
+        summary: result.message,
+        detailJson: JSON.stringify(result),
+        }),
+      ]).catch(() => {});
     }
 
     const refreshed = await getTunnelRecord(env, tunnelId);
@@ -963,6 +1137,16 @@ async function handleTestTunnel(
 
     if (body.persistResult !== false) {
       await storeTunnelTestResult(env, tunnelId, failure);
+      await Promise.all([
+        insertTunnelTestRun(env, tunnelId, failure),
+        insertTunnelEvent(env, {
+        tunnelId,
+        kind: "tunnel.test",
+        level: "error",
+        summary: failure.message,
+        detailJson: JSON.stringify(failure),
+        }),
+      ]).catch(() => {});
     }
 
     return jsonResponse(
@@ -1022,6 +1206,16 @@ async function handleRotateTunnelToken(
 
   const refreshed = await getTunnelRecord(env, tunnelId);
   const pairings = await listPairingSessionsForTunnel(env, tunnelId, 8);
+  await insertTunnelEvent(env, {
+    tunnelId,
+    kind: "tunnel.rotated",
+    level: "warning",
+    summary: `Rotated scoped bootstrap for ${existing.publicHostname}`,
+    detailJson: JSON.stringify({
+      cloudflareTunnelId: provisioned.cloudflareTunnelId,
+      rotatedAt: new Date().toISOString(),
+    }),
+  }).catch(() => {});
   return jsonResponse({
     tunnel: refreshed ? serializeTunnelRecord(refreshed) : serializeTunnelRecord(existing),
     pairings: pairings.map(serializePairingSession),
@@ -1092,6 +1286,20 @@ async function handleTunnelHeartbeat(
     existing.metadataJson,
     {},
   );
+  const previousConnector =
+    currentMetadata.connector &&
+    typeof currentMetadata.connector === "object" &&
+    !Array.isArray(currentMetadata.connector)
+      ? (currentMetadata.connector as Record<string, unknown>)
+      : null;
+  const previousStatus =
+    typeof previousConnector?.status === "string" ? previousConnector.status : null;
+  const previousVersion =
+    typeof previousConnector?.version === "string" ? previousConnector.version : null;
+  const previousReachable =
+    typeof previousConnector?.localServiceReachable === "boolean"
+      ? previousConnector.localServiceReachable
+      : null;
 
   await markTunnelHeartbeat(env, tunnelId, {
     connectorStatus,
@@ -1120,6 +1328,29 @@ async function handleTunnelHeartbeat(
       connectorVersion: body.version ?? pairing.connectorVersion,
     }),
   );
+  if (
+    previousStatus !== connectorStatus ||
+    previousVersion !== (body.version ?? null) ||
+    previousReachable !== (body.localServiceReachable ?? null)
+  ) {
+    await insertTunnelEvent(env, {
+      tunnelId,
+      kind: "connector.heartbeat",
+      level:
+        connectorStatus === "connected"
+          ? "info"
+          : connectorStatus === "degraded"
+            ? "warning"
+            : "error",
+      summary: `Connector ${connectorStatus} for ${existing.publicHostname}`,
+      detailJson: JSON.stringify({
+        pairingId,
+        version: body.version ?? null,
+        localServiceReachable: body.localServiceReachable ?? null,
+        note: body.note ?? null,
+      }),
+    }).catch(() => {});
+  }
 
   const refreshed = await getTunnelRecord(env, tunnelId);
   return jsonResponse({
@@ -1166,6 +1397,18 @@ async function handleCreatePairing(
       { status: 500 },
     );
   }
+
+  await insertTunnelEvent(env, {
+    tunnelId,
+    kind: "pairing.created",
+    level: "info",
+    summary: `Created one-time pairing for ${tunnel.publicHostname}`,
+    detailJson: JSON.stringify({
+      pairingId,
+      issuedBy: session.email ?? session.subject,
+      expiresAt: pairing.expiresAt,
+    }),
+  }).catch(() => {});
 
   return jsonResponse(
     {
@@ -1244,6 +1487,19 @@ async function handleExchangePairing(
       { status: 500 },
     );
   }
+
+  await insertTunnelEvent(env, {
+    tunnelId: tunnel.id,
+    kind: "pairing.exchanged",
+    level: "info",
+    summary: `Connector paired for ${tunnel.publicHostname}`,
+    detailJson: JSON.stringify({
+      pairingId: refreshedPairing.id,
+      connectorName: refreshedPairing.connectorName,
+      connectorVersion: refreshedPairing.connectorVersion,
+      connectorExpiresAt: refreshedPairing.connectorExpiresAt,
+    }),
+  }).catch(() => {});
 
   return jsonResponse({
     pairing: serializePairingSession(refreshedPairing),
@@ -1719,6 +1975,20 @@ export default class EdgeIntelWorker extends WorkerEntrypoint<Env> {
       /^\/api\/tunnels\/[^/]+\/test$/.test(path)
     ) {
       return handleTestTunnel(request, this.env, path.split("/")[3]);
+    }
+
+    if (
+      request.method === "GET" &&
+      /^\/api\/tunnels\/[^/]+\/events$/.test(path)
+    ) {
+      return handleGetTunnelEvents(this.env, path.split("/")[3]);
+    }
+
+    if (
+      request.method === "GET" &&
+      /^\/api\/tunnels\/[^/]+\/observability$/.test(path)
+    ) {
+      return handleGetTunnelObservability(this.env, path.split("/")[3]);
     }
 
     if (

@@ -40,6 +40,7 @@ export type TunnelTestStatus = "passed" | "failed" | "warning";
 export type PairingSessionStatus = "pending" | "active" | "revoked" | "expired";
 export type OperatorSessionMode = "access" | "dev-bypass";
 export type HostnameValidationStatus = "valid" | "warning" | "invalid";
+export type TunnelEventLevel = "info" | "warning" | "error";
 
 export interface ScanRequestBody {
   domain?: string;
@@ -577,4 +578,33 @@ export interface HostnameValidationResult {
   conflicts: HostnameConflictView[];
   existingTunnelRecordConflict: boolean;
   message: string;
+}
+
+export interface PersistedTunnelEvent {
+  id: string;
+  tunnelId: string;
+  kind: string;
+  level: TunnelEventLevel;
+  summary: string;
+  detailJson: string;
+  createdAt: string;
+}
+
+export interface TunnelEventView {
+  id: string;
+  tunnelId: string;
+  kind: string;
+  level: TunnelEventLevel;
+  summary: string;
+  detail: Record<string, unknown>;
+  createdAt: string;
+}
+
+export interface PersistedTunnelTestRun {
+  id: string;
+  tunnelId: string;
+  status: TunnelTestStatus;
+  resultJson: string;
+  testedAt: string;
+  createdAt: string;
 }
