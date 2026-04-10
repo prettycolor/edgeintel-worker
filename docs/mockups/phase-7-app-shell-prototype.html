@@ -1,0 +1,981 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>EdgeIntel App Shell Prototype</title>
+    <style>
+      :root {
+        --bg: #ebe5d8;
+        --surface: #f7f2e9;
+        --surface-2: #fffaf2;
+        --shell: #121519;
+        --shell-soft: #1b2127;
+        --ink: #14171a;
+        --ink-soft: rgba(20, 23, 26, 0.65);
+        --line: rgba(20, 23, 26, 0.09);
+        --line-dark: rgba(255, 255, 255, 0.08);
+        --signal: #8ef061;
+        --signal-soft: rgba(142, 240, 97, 0.16);
+        --cyan: #7fd6ff;
+        --warn: #ff9f65;
+        --radius-xl: 30px;
+        --radius-lg: 22px;
+        --radius-md: 16px;
+        --shadow: 0 24px 70px rgba(20, 23, 26, 0.12);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: "IBM Plex Sans", "Avenir Next", sans-serif;
+        color: var(--ink);
+        background:
+          radial-gradient(circle at top left, rgba(255, 255, 255, 0.66), transparent 24%),
+          linear-gradient(180deg, #f0eadf 0%, var(--bg) 100%);
+      }
+
+      .viewport {
+        width: min(1500px, calc(100vw - 36px));
+        margin: 18px auto;
+        padding: 20px;
+        border-radius: 40px;
+        background: rgba(255, 250, 242, 0.58);
+        border: 1px solid rgba(255, 255, 255, 0.65);
+        box-shadow: var(--shadow);
+        backdrop-filter: blur(16px);
+      }
+
+      .shell {
+        min-height: calc(100vh - 72px);
+        border-radius: 30px;
+        overflow: hidden;
+        display: grid;
+        grid-template-columns: 260px minmax(0, 1fr);
+        background: linear-gradient(180deg, rgba(255, 252, 246, 0.82), rgba(247, 241, 232, 0.86));
+      }
+
+      .sidebar {
+        padding: 22px 18px 20px;
+        background: linear-gradient(180deg, #111419, #171c22);
+        color: white;
+        border-right: 1px solid var(--line-dark);
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 24px;
+      }
+
+      .brand-mark {
+        width: 34px;
+        height: 34px;
+        border-radius: 12px;
+        background: linear-gradient(135deg, var(--signal), var(--cyan));
+      }
+
+      .brand h1 {
+        margin: 0;
+        font-family: "Space Grotesk", "Avenir Next", sans-serif;
+        font-size: 22px;
+        letter-spacing: -0.05em;
+      }
+
+      .brand p,
+      .nav-meta,
+      .status-label,
+      .eyebrow {
+        margin: 0;
+        font-size: 11px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .brand p {
+        color: rgba(255, 255, 255, 0.58);
+        margin-top: 4px;
+      }
+
+      .workspace-switcher {
+        display: grid;
+        gap: 10px;
+        margin-bottom: 22px;
+      }
+
+      .workspace-chip {
+        padding: 12px 14px;
+        border-radius: 16px;
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+      }
+
+      .workspace-chip strong {
+        display: block;
+        font-size: 14px;
+        margin-bottom: 4px;
+      }
+
+      .workspace-chip span {
+        color: rgba(255, 255, 255, 0.58);
+        font-size: 13px;
+      }
+
+      .nav-group {
+        margin-bottom: 18px;
+      }
+
+      .nav-meta {
+        color: rgba(255, 255, 255, 0.48);
+        margin-bottom: 10px;
+      }
+
+      .nav-item {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 12px 14px;
+        border-radius: 16px;
+        color: rgba(255, 255, 255, 0.82);
+        font-size: 14px;
+        margin-bottom: 6px;
+      }
+
+      .nav-item.active {
+        background: rgba(255, 255, 255, 0.08);
+        color: white;
+      }
+
+      .nav-item .badge {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 28px;
+        height: 24px;
+        padding: 0 8px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.08);
+        font-size: 11px;
+      }
+
+      .sidebar-footer {
+        margin-top: 28px;
+        padding: 14px;
+        border-radius: 18px;
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+      }
+
+      .sidebar-footer strong {
+        display: block;
+        margin-bottom: 8px;
+      }
+
+      .sidebar-footer p {
+        margin: 0;
+        color: rgba(255, 255, 255, 0.66);
+        font-size: 13px;
+        line-height: 1.55;
+      }
+
+      .main {
+        position: relative;
+        padding: 22px;
+        overflow: hidden;
+      }
+
+      .main::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background-image:
+          linear-gradient(rgba(20, 23, 26, 0.028) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(20, 23, 26, 0.028) 1px, transparent 1px);
+        background-size: 30px 30px;
+        pointer-events: none;
+      }
+
+      .topbar {
+        position: relative;
+        z-index: 1;
+        display: flex;
+        justify-content: space-between;
+        gap: 18px;
+        align-items: center;
+        margin-bottom: 18px;
+      }
+
+      .search {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 14px 18px;
+        border-radius: 18px;
+        background: rgba(255, 255, 255, 0.65);
+        border: 1px solid rgba(20, 23, 26, 0.07);
+      }
+
+      .search span {
+        color: var(--ink-soft);
+        font-size: 14px;
+      }
+
+      .top-actions {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+      }
+
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        padding: 12px 14px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.66);
+        border: 1px solid rgba(20, 23, 26, 0.06);
+        font-size: 13px;
+      }
+
+      .dot {
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+        background: var(--signal);
+        box-shadow: 0 0 0 8px rgba(142, 240, 97, 0.12);
+      }
+
+      .hero-row {
+        position: relative;
+        z-index: 1;
+        display: grid;
+        grid-template-columns: 1.4fr 0.9fr;
+        gap: 16px;
+        margin-bottom: 18px;
+      }
+
+      .surface,
+      .surface-dark {
+        border-radius: var(--radius-xl);
+        padding: 24px;
+        box-shadow: 0 16px 42px rgba(20, 23, 26, 0.07);
+      }
+
+      .surface {
+        background: rgba(255, 255, 255, 0.68);
+        border: 1px solid rgba(20, 23, 26, 0.08);
+      }
+
+      .surface-dark {
+        background: linear-gradient(180deg, #15191e, #181d23);
+        color: white;
+        border: 1px solid rgba(255, 255, 255, 0.07);
+      }
+
+      .eyebrow {
+        color: var(--signal);
+        margin-bottom: 12px;
+      }
+
+      h2,
+      h3 {
+        margin: 0;
+        font-family: "Space Grotesk", "Avenir Next", sans-serif;
+        letter-spacing: -0.05em;
+      }
+
+      .hero-row h2 {
+        font-size: clamp(30px, 3vw, 44px);
+        max-width: 12ch;
+      }
+
+      .hero-row p {
+        margin: 10px 0 0;
+        color: var(--ink-soft);
+        line-height: 1.65;
+        max-width: 62ch;
+      }
+
+      .surface-dark p {
+        color: rgba(255, 255, 255, 0.68);
+      }
+
+      .stat-strip {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 12px;
+        margin-top: 20px;
+      }
+
+      .stat {
+        padding: 14px 0 0;
+        border-top: 1px solid rgba(20, 23, 26, 0.08);
+      }
+
+      .surface-dark .stat {
+        border-top-color: rgba(255, 255, 255, 0.08);
+      }
+
+      .stat strong {
+        display: block;
+        font-size: 24px;
+        margin-top: 8px;
+      }
+
+      .layout {
+        position: relative;
+        z-index: 1;
+        display: grid;
+        grid-template-columns: 1.1fr 0.95fr;
+        gap: 16px;
+      }
+
+      .stack {
+        display: grid;
+        gap: 16px;
+      }
+
+      .tabs {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-bottom: 18px;
+      }
+
+      .tab {
+        padding: 10px 14px;
+        border-radius: 999px;
+        font-size: 12px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        background: rgba(20, 23, 26, 0.05);
+      }
+
+      .tab.active {
+        background: rgba(20, 23, 26, 0.9);
+        color: white;
+      }
+
+      .table {
+        display: grid;
+        gap: 10px;
+      }
+
+      .table-row {
+        display: grid;
+        grid-template-columns: 1.35fr 1fr auto;
+        gap: 14px;
+        align-items: center;
+        padding: 14px 0;
+        border-bottom: 1px solid rgba(20, 23, 26, 0.08);
+      }
+
+      .table-row:last-child {
+        border-bottom: 0;
+      }
+
+      .surface-dark .table-row {
+        border-bottom-color: rgba(255, 255, 255, 0.08);
+      }
+
+      .table-row strong {
+        display: block;
+        margin-bottom: 4px;
+        font-size: 15px;
+      }
+
+      .table-row span {
+        color: var(--ink-soft);
+        font-size: 13px;
+      }
+
+      .surface-dark .table-row span {
+        color: rgba(255, 255, 255, 0.64);
+      }
+
+      .status-ok,
+      .status-warn {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 13px;
+        font-weight: 600;
+      }
+
+      .status-ok::before,
+      .status-warn::before {
+        content: "";
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+      }
+
+      .status-ok::before {
+        background: var(--signal);
+      }
+
+      .status-warn::before {
+        background: var(--warn);
+      }
+
+      .wizard-modal {
+        position: relative;
+        overflow: hidden;
+      }
+
+      .wizard-modal::after {
+        content: "";
+        position: absolute;
+        inset: auto 0 0;
+        height: 2px;
+        background: linear-gradient(90deg, transparent, var(--signal), transparent);
+      }
+
+      .wizard-header {
+        display: flex;
+        justify-content: space-between;
+        gap: 14px;
+        align-items: start;
+        margin-bottom: 18px;
+      }
+
+      .wizard-header h3 {
+        font-size: 28px;
+      }
+
+      .step-grid {
+        display: grid;
+        grid-template-columns: 220px minmax(0, 1fr);
+        gap: 16px;
+      }
+
+      .step-list {
+        display: grid;
+        gap: 8px;
+      }
+
+      .step {
+        padding: 12px 14px;
+        border-radius: 16px;
+        background: rgba(255, 255, 255, 0.04);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+      }
+
+      .step.active {
+        background: rgba(255, 255, 255, 0.1);
+      }
+
+      .step strong {
+        display: block;
+        margin-bottom: 4px;
+      }
+
+      .step span {
+        color: rgba(255, 255, 255, 0.62);
+        font-size: 13px;
+        line-height: 1.5;
+      }
+
+      .form {
+        display: grid;
+        gap: 12px;
+      }
+
+      .form-row {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .field {
+        padding: 14px;
+        border-radius: 18px;
+        background: rgba(255, 255, 255, 0.04);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+      }
+
+      .field.wide {
+        grid-column: 1 / -1;
+      }
+
+      .field label {
+        display: block;
+        margin-bottom: 8px;
+        color: rgba(255, 255, 255, 0.58);
+        font-size: 11px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .field-value {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        align-items: center;
+        color: white;
+      }
+
+      .toggle {
+        width: 48px;
+        height: 28px;
+        border-radius: 999px;
+        background: rgba(127, 214, 255, 0.28);
+        padding: 3px;
+      }
+
+      .toggle::after {
+        content: "";
+        display: block;
+        width: 22px;
+        height: 22px;
+        border-radius: 50%;
+        background: white;
+        transform: translateX(20px);
+      }
+
+      .modal-footer {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 14px;
+        margin-top: 18px;
+      }
+
+      .button {
+        appearance: none;
+        border: 0;
+        border-radius: 999px;
+        padding: 13px 16px;
+        font: inherit;
+        font-weight: 600;
+      }
+
+      .button.primary {
+        background: linear-gradient(135deg, #f7ffec, white);
+        color: var(--shell);
+      }
+
+      .button.secondary {
+        background: rgba(255, 255, 255, 0.08);
+        color: white;
+      }
+
+      .test-list {
+        display: grid;
+        gap: 10px;
+      }
+
+      .test {
+        display: grid;
+        grid-template-columns: 1.2fr 1fr auto;
+        gap: 14px;
+        padding: 14px 0;
+        border-bottom: 1px solid rgba(20, 23, 26, 0.08);
+      }
+
+      .test:last-child {
+        border-bottom: 0;
+      }
+
+      .footer-band {
+        position: relative;
+        z-index: 1;
+        margin-top: 16px;
+        display: grid;
+        grid-template-columns: 1.2fr 0.8fr;
+        gap: 16px;
+      }
+
+      .mini-log {
+        display: grid;
+        gap: 10px;
+      }
+
+      .mini-log-line {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: 12px;
+        font-size: 13px;
+        line-height: 1.55;
+      }
+
+      .mini-log-line time {
+        color: var(--ink-soft);
+      }
+
+      @media (max-width: 1180px) {
+        .shell,
+        .hero-row,
+        .layout,
+        .footer-band,
+        .step-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      @media (max-width: 860px) {
+        .viewport {
+          width: calc(100vw - 16px);
+          margin: 8px auto;
+          padding: 8px;
+          border-radius: 24px;
+        }
+
+        .shell {
+          grid-template-columns: 1fr;
+          min-height: auto;
+        }
+
+        .sidebar,
+        .main {
+          padding: 16px;
+        }
+
+        .form-row,
+        .stat-strip,
+        .table-row,
+        .test {
+          grid-template-columns: 1fr;
+        }
+
+        .topbar,
+        .wizard-header,
+        .modal-footer {
+          flex-direction: column;
+          align-items: flex-start;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="viewport">
+      <div class="shell">
+        <aside class="sidebar">
+          <div class="brand">
+            <div class="brand-mark"></div>
+            <div>
+              <h1>EdgeIntel</h1>
+              <p>Provider control plane</p>
+            </div>
+          </div>
+
+          <div class="workspace-switcher">
+            <div class="workspace-chip">
+              <strong>hostingtool.dev</strong>
+              <span>Single environment · internal control plane</span>
+            </div>
+          </div>
+
+          <div class="nav-group">
+            <div class="nav-meta">Workspace</div>
+            <div class="nav-item">
+              Overview
+              <span class="badge">4</span>
+            </div>
+            <div class="nav-item active">
+              AI connectivity
+              <span class="badge">live</span>
+            </div>
+            <div class="nav-item">
+              Scans
+              <span class="badge">12</span>
+            </div>
+            <div class="nav-item">
+              Exports
+              <span class="badge">3</span>
+            </div>
+          </div>
+
+          <div class="nav-group">
+            <div class="nav-meta">Settings</div>
+            <div class="nav-item">Providers</div>
+            <div class="nav-item">Tunnels</div>
+            <div class="nav-item">Access policies</div>
+            <div class="nav-item">Secret posture</div>
+          </div>
+
+          <div class="sidebar-footer">
+            <strong>Visual direction</strong>
+            <p>
+              Dense app shell, minimal chrome, modal wizard, right-inspector logic, and diagnostic surfaces that feel operator-grade.
+            </p>
+          </div>
+        </aside>
+
+        <main class="main">
+          <div class="topbar">
+            <div class="search">
+              <span>Search providers, tunnels, or health events</span>
+            </div>
+            <div class="top-actions">
+              <div class="pill">
+                <span class="dot"></span>
+                Connector online
+              </div>
+              <div class="pill">Last full test 42s ago</div>
+            </div>
+          </div>
+
+          <section class="hero-row">
+            <article class="surface">
+              <div class="eyebrow">AI connectivity workspace</div>
+              <h2>Everything important stays in the app shell.</h2>
+              <p>
+                This version is intentionally product-native: active routes, secret posture, local connector state, tunnel orchestration, and connection tests all live inside one operational workspace.
+              </p>
+              <div class="stat-strip">
+                <div class="stat">
+                  <div class="status-label">Active providers</div>
+                  <strong>03</strong>
+                </div>
+                <div class="stat">
+                  <div class="status-label">Tunnel routes</div>
+                  <strong>01</strong>
+                </div>
+                <div class="stat">
+                  <div class="status-label">Protected hosts</div>
+                  <strong>01</strong>
+                </div>
+                <div class="stat">
+                  <div class="status-label">Tests passing</div>
+                  <strong>05/06</strong>
+                </div>
+              </div>
+            </article>
+
+            <article class="surface-dark">
+              <div class="eyebrow">Runtime</div>
+              <h3 style="font-size: 28px; margin-bottom: 10px">Current route selection</h3>
+              <p>
+                Hosted frontier models stay available, but the local Ollama route is primary for grounded operator briefs and low-cost testing.
+              </p>
+              <div class="stat-strip">
+                <div class="stat">
+                  <div class="status-label">Default local</div>
+                  <strong>local-direct</strong>
+                </div>
+                <div class="stat">
+                  <div class="status-label">Tunnel host</div>
+                  <strong>ollama.edgeintel.run</strong>
+                </div>
+                <div class="stat">
+                  <div class="status-label">Model</div>
+                  <strong>gemma3:27b</strong>
+                </div>
+                <div class="stat">
+                  <div class="status-label">Protection</div>
+                  <strong>Access</strong>
+                </div>
+              </div>
+            </article>
+          </section>
+
+          <section class="layout">
+            <div class="stack">
+              <article class="surface">
+                <div class="tabs">
+                  <div class="tab active">Providers</div>
+                  <div class="tab">Local models</div>
+                  <div class="tab">Tunnels</div>
+                  <div class="tab">Tests</div>
+                </div>
+
+                <div class="table">
+                  <div class="table-row">
+                    <div>
+                      <strong>Anthropic via AI Gateway</strong>
+                      <span>claude-sonnet-4 · hosted fallback · secret present</span>
+                    </div>
+                    <span>Tested 42s ago</span>
+                    <div class="status-ok">Healthy</div>
+                  </div>
+                  <div class="table-row">
+                    <div>
+                      <strong>OpenAI direct</strong>
+                      <span>gpt-5.4 · API key route · structured output enabled</span>
+                    </div>
+                    <span>Tested 3m ago</span>
+                    <div class="status-ok">Healthy</div>
+                  </div>
+                  <div class="table-row">
+                    <div>
+                      <strong>Ollama tunnel route</strong>
+                      <span>gemma3:27b · local-direct · connector-managed</span>
+                    </div>
+                    <span>Heartbeat 9s ago</span>
+                    <div class="status-ok">Healthy</div>
+                  </div>
+                </div>
+              </article>
+
+              <article class="surface">
+                <div class="eyebrow" style="color: var(--ink-soft)">Connection tests</div>
+                <h3 style="font-size: 28px; margin-bottom: 12px">Visual diagnostics, not raw log noise.</h3>
+                <div class="test-list">
+                  <div class="test">
+                    <div>
+                      <strong>Connector heartbeat</strong>
+                      <span>Desktop agent reported version, OS, and local reachability.</span>
+                    </div>
+                    <span>124 ms · 9 seconds ago</span>
+                    <div class="status-ok">Passed</div>
+                  </div>
+                  <div class="test">
+                    <div>
+                      <strong>Local endpoint probe</strong>
+                      <span>`/v1/chat/completions` compatibility confirmed.</span>
+                    </div>
+                    <span>276 ms · model list returned</span>
+                    <div class="status-ok">Passed</div>
+                  </div>
+                  <div class="test">
+                    <div>
+                      <strong>Tunnel reachability</strong>
+                      <span>Hostname resolved with expected ingress and edge response.</span>
+                    </div>
+                    <span>341 ms · DNS + edge connect</span>
+                    <div class="status-ok">Passed</div>
+                  </div>
+                  <div class="test">
+                    <div>
+                      <strong>Inference dry run</strong>
+                      <span>Grounded AI brief completed, but output requires manual review.</span>
+                    </div>
+                    <span>1.14 s · full request path</span>
+                    <div class="status-warn">Review</div>
+                  </div>
+                </div>
+              </article>
+            </div>
+
+            <article class="surface-dark wizard-modal">
+              <div class="wizard-header">
+                <div>
+                  <div class="eyebrow">Modal wizard</div>
+                  <h3>Connect local model</h3>
+                  <p>
+                    The onboarding flow should feel like an in-app assistant panel, not a separate marketing page.
+                  </p>
+                </div>
+                <div class="pill">Step 2 of 4</div>
+              </div>
+
+              <div class="step-grid">
+                <div class="step-list">
+                  <div class="step">
+                    <strong>Choose route</strong>
+                    <span>Hosted, local, or hybrid.</span>
+                  </div>
+                  <div class="step active">
+                    <strong>Detect endpoint</strong>
+                    <span>Connector probes localhost and validates compatibility.</span>
+                  </div>
+                  <div class="step">
+                    <strong>Provision tunnel</strong>
+                    <span>Create hostname, Access, and service token.</span>
+                  </div>
+                  <div class="step">
+                    <strong>Run live test</strong>
+                    <span>Verify TLS, auth, route, and inference.</span>
+                  </div>
+                </div>
+
+                <div class="form">
+                  <div class="form-row">
+                    <div class="field">
+                      <label>Provider type</label>
+                      <div class="field-value">
+                        <span>Ollama</span>
+                        <span class="status-ok">Detected</span>
+                      </div>
+                    </div>
+                    <div class="field">
+                      <label>Local model</label>
+                      <div class="field-value">
+                        <span>gemma3:27b</span>
+                        <span>Available</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="form-row">
+                    <div class="field">
+                      <label>Local endpoint</label>
+                      <div class="field-value">
+                        <span>127.0.0.1:11434</span>
+                        <span class="status-ok">Healthy</span>
+                      </div>
+                    </div>
+                    <div class="field">
+                      <label>Public hostname</label>
+                      <div class="field-value">
+                        <span>ollama.edgeintel.run</span>
+                        <span>Reserved</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="field wide">
+                    <label>Access protection</label>
+                    <div class="field-value">
+                      <span>Attach service token headers from the Worker automatically.</span>
+                      <span class="toggle"></span>
+                    </div>
+                  </div>
+                  <div class="field wide">
+                    <label>Readiness notes</label>
+                    <div class="field-value">
+                      <span>Connector can install `cloudflared`, verify the local route, and keep heartbeats active after setup.</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="modal-footer">
+                <span style="color: rgba(255,255,255,0.62)">Fallback copy-and-paste commands stay available for advanced users.</span>
+                <div style="display: flex; gap: 10px; flex-wrap: wrap">
+                  <button class="button secondary" type="button">Back</button>
+                  <button class="button primary" type="button">Provision tunnel + continue</button>
+                </div>
+              </div>
+            </article>
+          </section>
+
+          <section class="footer-band">
+            <article class="surface">
+              <div class="eyebrow" style="color: var(--ink-soft)">Event stream</div>
+              <h3 style="font-size: 24px; margin-bottom: 14px">Quality-of-life details that matter</h3>
+              <div class="mini-log">
+                <div class="mini-log-line">
+                  <time>20:51</time>
+                  <div>Token rotation should feel routine, not scary. Present the new status inline and show who acknowledged it.</div>
+                </div>
+                <div class="mini-log-line">
+                  <time>20:49</time>
+                  <div>Health regressions need precise messages like “Access denied” or “model missing,” not a generic “test failed.”</div>
+                </div>
+                <div class="mini-log-line">
+                  <time>20:47</time>
+                  <div>Keep “provider settings” and “active runtime route” separate so users understand what is configured versus what is live.</div>
+                </div>
+              </div>
+            </article>
+
+            <article class="surface-dark">
+              <div class="eyebrow">Decision</div>
+              <h3 style="font-size: 24px; margin-bottom: 12px">No public website is required for the Worker.</h3>
+              <p>
+                The core product should be an authenticated app shell. A marketing site can come later, but the actual buildout should optimize for the in-app control plane first.
+              </p>
+            </article>
+          </section>
+        </main>
+      </div>
+    </div>
+  </body>
+</html>

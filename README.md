@@ -136,3 +136,5 @@ The implementation sequence is documented in [docs/implementation-phases.md](./d
 
 For the next onboarding-focused expansion, see
 [docs/provider-and-tunnel-wizard-roadmap.md](./docs/provider-and-tunnel-wizard-roadmap.md).
+
+UI direction prototypes for Phase 7 live in [docs/mockups/README.md](./docs/mockups/README.md).
