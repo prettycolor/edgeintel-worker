@@ -246,26 +246,36 @@ Cloudflare Access.
 
 ### Recommended pattern
 
-1. Choose the operator host:
-   - fastest path: enable Cloudflare Access on the deployed `workers.dev` URL
-   - production path: attach the Worker to a custom hostname you control
-2. Create or manage the Cloudflare Access protection for that host.
-3. Copy the Access application audience into `ACCESS_AUD`.
-4. Set `ACCESS_TEAM_DOMAIN` to your Zero Trust team domain.
-5. Verify that requests to `/app`, `/app/providers`, `/app/tunnels`, and the
-   secret-bearing APIs now include `Cf-Access-Jwt-Assertion`.
+Use `edgeintel.app` as the primary operator host and keep `workers.dev` only as
+a fallback smoke host.
 
-For the current EdgeIntel deployment, the recommended path is to enable Access
-on `edgeintel.app`. Keep the `workers.dev` route only as a fallback smoke host
-while the custom-domain rollout settles.
+Important implementation detail:
 
-For `workers.dev`, Cloudflare documents the path as:
+- EdgeIntel currently validates a single `ACCESS_AUD`.
+- Because of that, create one primary self-hosted Access app for
+  `edgeintel.app/*`.
+- Then create more-specific bypass apps for the public routes that must stay
+  reachable without Access.
 
-1. Go to Workers & Pages.
-2. Select the Worker.
-3. Open `Settings > Domains & Routes`.
-4. For `workers.dev`, click `Enable Cloudflare Access`.
-5. Optionally open `Manage Cloudflare Access` to refine policies.
+Minimum Access layout:
+
+1. protected app: `edgeintel.app/*`
+2. bypass app: `edgeintel.app/health`
+3. bypass app: `edgeintel.app/.well-known/*`
+4. bypass app: `edgeintel.app/mcp`
+5. bypass app: `edgeintel.app/authorize*`
+6. bypass app: `edgeintel.app/callback`
+7. bypass app: `edgeintel.app/token`
+8. bypass app: `edgeintel.app/register`
+9. bypass app: `edgeintel.app/api/pairings/*/exchange`
+10. bypass app: `edgeintel.app/api/tunnels/*/heartbeat`
+
+Then:
+
+1. Copy the Access application audience from the protected `edgeintel.app/*`
+   app into `ACCESS_AUD`.
+2. Set `ACCESS_TEAM_DOMAIN` to your Zero Trust team domain.
+3. Verify that protected requests now include `Cf-Access-Jwt-Assertion`.
 
 Without this, the control-plane app routes will reject remote use.
 

@@ -7,10 +7,14 @@ operator use requires Cloudflare Access to be configured first. Without that,
 the public deployed hostname is only suitable for `/health`, MCP metadata, and
 basic auth-challenge smoke tests.
 
-That Access gate can be applied either to a custom hostname or directly to the
-deployed `workers.dev` URL.
-
 For the current deployment, use `https://edgeintel.app` as the primary host.
+
+EdgeIntel currently expects one Access audience for protected operator traffic,
+so the recommended setup is:
+
+- one protected Access app for `edgeintel.app/*`
+- more-specific bypass apps for the public health, MCP, pairing-exchange, and
+  heartbeat routes
 
 Use
 [`docs/access-mcp-activation.md`](/Users/b.rad/Documents/GitHub/edgeintel-worker/docs/access-mcp-activation.md)

@@ -30,21 +30,99 @@ This tells you exactly which secrets and remote surfaces are still missing.
 
 ## 2. Activate Cloudflare Access For The Operator Host
 
-Choose one host:
+Use `https://edgeintel.app` as the primary operator host.
 
-- recommended path: `https://edgeintel.app`
-- fallback path: the deployed `workers.dev` URL
+Important:
 
-For `workers.dev`, Cloudflare’s documented path is:
+- EdgeIntel currently validates a single `ACCESS_AUD`.
+- Because of that, use one primary self-hosted Access application for
+  `edgeintel.app/*`.
+- Then add more specific public bypass applications for the routes that must
+  remain public.
 
-1. Open `Workers & Pages`.
-2. Select the `edgeintel-worker` Worker.
-3. Go to `Settings > Domains & Routes`.
-4. For the `workers.dev` route, click `Enable Cloudflare Access`.
-5. Optionally click `Manage Cloudflare Access` to refine the policy.
+This preserves:
 
-Cloudflare Access adds `Cf-Access-Jwt-Assertion` to requests, but the Worker
-still needs two values to validate it:
+- protected `/app*` and operator `/api/*` routes with one consistent `AUD`
+- public `/health`
+- public MCP metadata and OAuth entry routes
+- public connector exchange and heartbeat routes
+
+Cloudflare documents both of the capabilities this pattern depends on:
+
+- self-hosted Access apps on public hostnames
+- application path precedence where more specific paths win
+
+References:
+
+- [Publish a self-hosted application to the Internet](https://developers.cloudflare.com/cloudflare-one/access-controls/applications/http-apps/self-hosted-public-app/)
+- [Application paths](https://developers.cloudflare.com/cloudflare-one/access-controls/policies/app-paths/)
+- [Access policies](https://developers.cloudflare.com/cloudflare-one/policies/access/)
+
+Create these Access applications in Cloudflare One -> `Access controls > Applications`:
+
+1. `EdgeIntel Operator`
+   - type: `Self-hosted`
+   - public hostname: `edgeintel.app/*`
+   - policy: `Allow`
+   - include rule: your email, ideally `care@okaybabe.co`
+
+2. `EdgeIntel Public Health`
+   - type: `Self-hosted`
+   - public hostname: `edgeintel.app/health`
+   - policy: `Bypass`
+   - include rule: `Everyone`
+
+3. `EdgeIntel Public MCP Metadata`
+   - type: `Self-hosted`
+   - public hostname: `edgeintel.app/.well-known/*`
+   - policy: `Bypass`
+   - include rule: `Everyone`
+
+4. `EdgeIntel Public MCP Entry`
+   - type: `Self-hosted`
+   - public hostname: `edgeintel.app/mcp`
+   - policy: `Bypass`
+   - include rule: `Everyone`
+
+5. `EdgeIntel Public MCP OAuth`
+   - type: `Self-hosted`
+   - public hostname: `edgeintel.app/authorize*`
+   - policy: `Bypass`
+   - include rule: `Everyone`
+
+6. `EdgeIntel Public MCP Callback`
+   - type: `Self-hosted`
+   - public hostname: `edgeintel.app/callback`
+   - policy: `Bypass`
+   - include rule: `Everyone`
+
+7. `EdgeIntel Public MCP Token`
+   - type: `Self-hosted`
+   - public hostname: `edgeintel.app/token`
+   - policy: `Bypass`
+   - include rule: `Everyone`
+
+8. `EdgeIntel Public MCP Register`
+   - type: `Self-hosted`
+   - public hostname: `edgeintel.app/register`
+   - policy: `Bypass`
+   - include rule: `Everyone`
+
+9. `EdgeIntel Pairing Exchange`
+   - type: `Self-hosted`
+   - public hostname: `edgeintel.app/api/pairings/*/exchange`
+   - policy: `Bypass`
+   - include rule: `Everyone`
+
+10. `EdgeIntel Tunnel Heartbeat`
+    - type: `Self-hosted`
+    - public hostname: `edgeintel.app/api/tunnels/*/heartbeat`
+    - policy: `Bypass`
+    - include rule: `Everyone`
+
+Cloudflare Access adds `Cf-Access-Jwt-Assertion` to protected requests, and the
+Worker needs two values from the primary `EdgeIntel Operator` application to
+validate it:
 
 - your team domain
 - the Access application Audience (`AUD`) tag
@@ -61,6 +139,8 @@ Reference:
 [App Launcher](https://developers.cloudflare.com/cloudflare-one/applications/app-launcher/)
 
 ### Application audience tag
+
+For EdgeIntel, copy the `AUD` from the primary `EdgeIntel Operator` Access app.
 
 Cloudflare documents the current dashboard path as:
 
