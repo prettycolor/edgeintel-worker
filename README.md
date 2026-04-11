@@ -277,6 +277,7 @@ Phase 15 now adds:
 Release-layer docs now add:
 
 - deployment runbook in [docs/deploy-to-cloudflare.md](./docs/deploy-to-cloudflare.md)
+- Access and MCP activation guide in [docs/access-mcp-activation.md](./docs/access-mcp-activation.md)
 - operator usage guide in [docs/operator-quickstart.md](./docs/operator-quickstart.md)
 - release checklist in [docs/release-checklist.md](./docs/release-checklist.md)
 - MCP evaluation in [docs/mcp-server-evaluation.md](./docs/mcp-server-evaluation.md)

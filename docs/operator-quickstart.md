@@ -10,6 +10,10 @@ basic auth-challenge smoke tests.
 That Access gate can be applied either to a custom hostname or directly to the
 deployed `workers.dev` URL.
 
+Use
+[`docs/access-mcp-activation.md`](/Users/b.rad/Documents/GitHub/edgeintel-worker/docs/access-mcp-activation.md)
+to finish the remote activation phase.
+
 ## What Is UI-Driven Today
 
 Current app surfaces:

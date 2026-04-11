@@ -3,6 +3,9 @@
 This is the operator runbook for deploying EdgeIntel onto a signed-in
 Cloudflare account.
 
+For the Access and MCP activation phase after deploy, use
+[`docs/access-mcp-activation.md`](/Users/b.rad/Documents/GitHub/edgeintel-worker/docs/access-mcp-activation.md).
+
 ## Deployment Modes
 
 Use one of these modes:
@@ -212,6 +215,12 @@ Then verify the MCP OAuth flow:
 - MCP Inspector against `https://<edgeintel-host>/mcp`
 
 These only work after the `MCP_ACCESS_*` secrets are set.
+
+To summarize all of this against the live deployment, run:
+
+```bash
+npm run remote:check --workspace @edgeintel/worker -- https://<edgeintel-host>
+```
 
 ## 8. Full Operator App Setup
 
