@@ -222,6 +222,12 @@ To summarize all of this against the live deployment, run:
 npm run remote:check --workspace @edgeintel/worker -- https://<edgeintel-host>
 ```
 
+To write several remote secrets in one pass and rerun the gate immediately:
+
+```bash
+npm run remote:activate --workspace @edgeintel/worker -- https://<edgeintel-host>
+```
+
 ## 8. Full Operator App Setup
 
 To use `/app/providers` and `/app/tunnels` remotely, protect the app with

@@ -19,6 +19,7 @@
     "db:local:apply": "bash scripts/d1-local.sh apply",
     "db:local:list": "bash scripts/d1-local.sh list",
     "db:local:reset": "bash scripts/d1-local.sh reset",
+    "remote:activate": "bash scripts/activate-remote.sh",
     "remote:check": "bash scripts/remote-readiness.sh",
     "verify": "npm run validate:install && npm run cf:types:check && npm run typecheck && npm run test && npm run deploy:dry-run"
   },

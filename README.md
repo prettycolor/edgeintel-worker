@@ -153,6 +153,8 @@ Useful follow-up commands:
 npm run validate:install
 npm run db:local:list
 npm run db:local:reset
+npm run remote:check --workspace @edgeintel/worker -- https://<edgeintel-host>
+npm run remote:activate --workspace @edgeintel/worker -- https://<edgeintel-host>
 npm run verify
 ```
 

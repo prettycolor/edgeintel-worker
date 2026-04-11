@@ -80,6 +80,13 @@ npx wrangler secret put ACCESS_TEAM_DOMAIN
 npx wrangler secret put ACCESS_AUD
 ```
 
+If you already have several values ready, you can export them in the shell and
+use the activation helper instead:
+
+```bash
+npm run remote:activate --workspace @edgeintel/worker -- https://edgeintel-worker.care-83e.workers.dev
+```
+
 After setting these, rerun the readiness check. The expected state is:
 
 - `/app` returns `401` for an unauthenticated curl instead of `500`
@@ -155,6 +162,25 @@ Recommended minimum permissions:
 - Access application and policy write
 - Zone read
 - DNS edit
+
+## 7.5 One-Command Secret Activation
+
+Once you have the values, the fastest path is:
+
+```bash
+export ACCESS_TEAM_DOMAIN="your-team.cloudflareaccess.com"
+export ACCESS_AUD="your-access-audience-tag"
+export MCP_ACCESS_CLIENT_ID="your-mcp-client-id"
+export MCP_ACCESS_CLIENT_SECRET="your-mcp-client-secret"
+export MCP_ACCESS_TOKEN_URL="https://your-team.cloudflareaccess.com/cdn-cgi/access/sso/oidc/<client-id>/token"
+export MCP_ACCESS_AUTHORIZATION_URL="https://your-team.cloudflareaccess.com/cdn-cgi/access/sso/oidc/<client-id>/authorization"
+export MCP_ACCESS_JWKS_URL="https://your-team.cloudflareaccess.com/cdn-cgi/access/sso/oidc/<client-id>/jwks"
+export CLOUDFLARE_API_TOKEN="your-in-app-cloudflare-api-token"
+
+npm run remote:activate --workspace @edgeintel/worker -- https://edgeintel-worker.care-83e.workers.dev
+```
+
+The script only writes variables that are actually set in the shell.
 
 ## 8. Re-Run The Gate
 
