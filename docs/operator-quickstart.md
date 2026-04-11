@@ -10,6 +10,8 @@ basic auth-challenge smoke tests.
 That Access gate can be applied either to a custom hostname or directly to the
 deployed `workers.dev` URL.
 
+For the current deployment, use `https://edgeintel.app` as the primary host.
+
 Use
 [`docs/access-mcp-activation.md`](/Users/b.rad/Documents/GitHub/edgeintel-worker/docs/access-mcp-activation.md)
 to finish the remote activation phase.

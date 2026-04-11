@@ -2,6 +2,10 @@
 
 Cloudflare-native domain posture and remediation engine for the `hostingtool.dev` / `hostinginfo.gg` environment.
 
+Primary deployed hostname: `https://edgeintel.app`
+
+Legacy smoke/fallback hostname during rollout: `https://edgeintel-worker.care-83e.workers.dev`
+
 ## What This Implements
 
 - `POST /api/scan` to create a bounded public-domain scan job

@@ -23,7 +23,7 @@ Without this phase, the deployment is real but only partially activated.
 From [`apps/worker`](/Users/b.rad/Documents/GitHub/edgeintel-worker/apps/worker):
 
 ```bash
-npm run remote:check -- https://edgeintel-worker.care-83e.workers.dev
+npm run remote:check -- https://edgeintel.app
 ```
 
 This tells you exactly which secrets and remote surfaces are still missing.
@@ -32,8 +32,8 @@ This tells you exactly which secrets and remote surfaces are still missing.
 
 Choose one host:
 
-- fastest path: the deployed `workers.dev` URL
-- production path: a custom hostname on a zone you control
+- recommended path: `https://edgeintel.app`
+- fallback path: the deployed `workers.dev` URL
 
 For `workers.dev`, Cloudflare’s documented path is:
 
@@ -84,7 +84,7 @@ If you already have several values ready, you can export them in the shell and
 use the activation helper instead:
 
 ```bash
-npm run remote:activate --workspace @edgeintel/worker -- https://edgeintel-worker.care-83e.workers.dev
+npm run remote:activate --workspace @edgeintel/worker -- https://edgeintel.app
 ```
 
 After setting these, rerun the readiness check. The expected state is:
@@ -177,7 +177,7 @@ export MCP_ACCESS_AUTHORIZATION_URL="https://your-team.cloudflareaccess.com/cdn-
 export MCP_ACCESS_JWKS_URL="https://your-team.cloudflareaccess.com/cdn-cgi/access/sso/oidc/<client-id>/jwks"
 export CLOUDFLARE_API_TOKEN="your-in-app-cloudflare-api-token"
 
-npm run remote:activate --workspace @edgeintel/worker -- https://edgeintel-worker.care-83e.workers.dev
+npm run remote:activate --workspace @edgeintel/worker -- https://edgeintel.app
 ```
 
 The script only writes variables that are actually set in the shell.
@@ -187,7 +187,7 @@ The script only writes variables that are actually set in the shell.
 Run:
 
 ```bash
-npm run remote:check -- https://edgeintel-worker.care-83e.workers.dev
+npm run remote:check -- https://edgeintel.app
 ```
 
 Then verify:

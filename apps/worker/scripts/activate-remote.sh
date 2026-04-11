@@ -26,7 +26,7 @@ Example:
   export ACCESS_TEAM_DOMAIN="example.cloudflareaccess.com"
   export ACCESS_AUD="01234567-89ab-cdef-0123-456789abcdef"
   export CLOUDFLARE_API_TOKEN="..."
-  bash scripts/activate-remote.sh https://edgeintel-worker.example.workers.dev
+  bash scripts/activate-remote.sh https://edgeintel.app
 EOF
 }
 

@@ -23,6 +23,13 @@ Use one of these modes:
 The public-smoke path is the fastest Cloudflare deploy. The full operator path
 is the real product story.
 
+Current canonical EdgeIntel host:
+
+- `https://edgeintel.app`
+
+The legacy `workers.dev` hostname can remain enabled as a fallback smoke host,
+but treat `edgeintel.app` as the primary operator and MCP endpoint.
+
 ## Prerequisites
 
 - Node `24.x`
@@ -35,7 +42,8 @@ For the full operator path, also prepare:
 
 - a Zero Trust organization
 - either:
-  - the default `workers.dev` hostname with Cloudflare Access enabled, or
+  - the primary custom hostname `edgeintel.app`, or
+  - the default `workers.dev` hostname with Cloudflare Access enabled as a fallback, or
   - a custom hostname you control for the EdgeIntel app
 - a Cloudflare API token for in-app tunnel, DNS, and Access orchestration
 - a Cloudflare Access for SaaS OIDC application for the MCP surface
@@ -178,6 +186,9 @@ npm run deploy
 This deploys the Worker, Durable Object, Workflow, and queue consumers to your
 authenticated Cloudflare account.
 
+The committed Worker config also publishes the Worker to the custom domain
+`edgeintel.app` via a Workers Custom Domain route.
+
 The committed Worker config intentionally leaves `cpu_ms` unset so the default
 deploy path also works on Free plan accounts. If you add explicit CPU limits
 back into
@@ -186,8 +197,8 @@ Cloudflare Free plans will reject the deploy.
 
 ## 7. Minimal Post-Deploy Smoke Test
 
-After deploy, confirm these public endpoints work on your `workers.dev` or
-custom domain:
+After deploy, confirm these public endpoints work on `https://edgeintel.app`
+first, and optionally on the fallback `workers.dev` hostname:
 
 - `GET /health`
 - `GET /.well-known/oauth-authorization-server`
@@ -243,6 +254,10 @@ Cloudflare Access.
 4. Set `ACCESS_TEAM_DOMAIN` to your Zero Trust team domain.
 5. Verify that requests to `/app`, `/app/providers`, `/app/tunnels`, and the
    secret-bearing APIs now include `Cf-Access-Jwt-Assertion`.
+
+For the current EdgeIntel deployment, the recommended path is to enable Access
+on `edgeintel.app`. Keep the `workers.dev` route only as a fallback smoke host
+while the custom-domain rollout settles.
 
 For `workers.dev`, Cloudflare documents the path as:
 

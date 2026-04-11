@@ -34,7 +34,7 @@ Minimum sign-off:
 
 - deploy to a signed-in Cloudflare account succeeds
 - remote D1 migrations are applied
-- public `/health` smoke test works remotely
+- public `/health` smoke test works remotely on the primary custom domain
 - public MCP metadata endpoints work remotely
 - `/mcp` returns the expected OAuth challenge without a token
 - scan, commercial brief, and export endpoints work remotely behind Access

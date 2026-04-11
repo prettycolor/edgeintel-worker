@@ -4,6 +4,13 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-04-09",
   "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  "workers_dev": true,
+  "routes": [
+    {
+      "pattern": "edgeintel.app",
+      "custom_domain": true
+    }
+  ],
   // Keep cpu_ms unset so the default deploy path still works on Free plan accounts.
   "observability": {
     "enabled": true,

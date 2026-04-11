@@ -4,13 +4,21 @@ set -euo pipefail
 
 if [[ $# -lt 1 ]]; then
   echo "Usage: bash scripts/remote-readiness.sh <base-url>"
-  echo "Example: bash scripts/remote-readiness.sh https://edgeintel-worker.example.workers.dev"
+  echo "Example: bash scripts/remote-readiness.sh https://edgeintel.app"
   exit 1
 fi
 
 BASE_URL="${1%/}"
+BASE_HOST="${BASE_URL#*://}"
+BASE_HOST="${BASE_HOST%%/*}"
+BASE_HOST="${BASE_HOST%%:*}"
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
+
+CURL_EXTRA_ARGS=()
+if [[ "$BASE_HOST" != "localhost" && "$BASE_HOST" != "127.0.0.1" && "$BASE_HOST" != "::1" ]]; then
+  CURL_EXTRA_ARGS+=(--doh-url "https://cloudflare-dns.com/dns-query")
+fi
 
 green() {
   printf '\033[32m%s\033[0m\n' "$1"
@@ -39,11 +47,13 @@ request() {
 
   if [[ -n "$body" ]]; then
     status="$(curl -sS -o "$body_file" -D "$headers_file" -w '%{http_code}' -X "$method" \
+      "${CURL_EXTRA_ARGS[@]}" \
       -H 'content-type: application/json' \
       --data "$body" \
       "$BASE_URL$path")"
   else
     status="$(curl -sS -o "$body_file" -D "$headers_file" -w '%{http_code}' -X "$method" \
+      "${CURL_EXTRA_ARGS[@]}" \
       "$BASE_URL$path")"
   fi
 
