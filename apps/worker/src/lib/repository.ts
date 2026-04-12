@@ -5,6 +5,7 @@ import type {
   Finding,
   PersistedDomainWatch,
   PersistedArtifact,
+  PersistedExportRecord,
   PersistedPairingSession,
   PersistedProviderSetting,
   PersistedRecommendation,
@@ -141,6 +142,19 @@ function toPairingSession(
     metadataJson: String(row.metadata_json ?? "{}"),
     createdAt: String(row.created_at),
     updatedAt: String(row.updated_at),
+  };
+}
+
+function toExportRecord(row: Record<string, unknown>): PersistedExportRecord {
+  return {
+    id: String(row.id),
+    scanRunId: String(row.scan_run_id),
+    format: row.format as PersistedExportRecord["format"],
+    status: String(row.status),
+    objectKey: String(row.object_key),
+    contentType: String(row.content_type),
+    payloadJson: String(row.payload_json ?? "{}"),
+    createdAt: String(row.created_at),
   };
 }
 
@@ -498,6 +512,18 @@ export async function getLatestRunForDomain(
   return row ? toRun(row) : null;
 }
 
+export async function listRecentScanRuns(
+  env: Env,
+  limit = 20,
+): Promise<PersistedScanRun[]> {
+  const result = await env.EDGE_DB.prepare(
+    `SELECT * FROM scan_runs ORDER BY created_at DESC LIMIT ?`,
+  )
+    .bind(limit)
+    .all<Record<string, unknown>>();
+  return (result.results ?? []).map(toRun);
+}
+
 export async function getFindingsForRun(
   env: Env,
   scanRunId: string,
@@ -589,12 +615,29 @@ export async function getScanContext(
 export async function getExportRecord(
   env: Env,
   exportId: string,
-): Promise<Record<string, unknown> | null> {
-  return (
-    (await env.EDGE_DB.prepare(`SELECT * FROM scan_exports WHERE id = ?`)
-      .bind(exportId)
-      .first<Record<string, unknown>>()) ?? null
-  );
+): Promise<PersistedExportRecord | null> {
+  const row = await env.EDGE_DB.prepare(`SELECT * FROM scan_exports WHERE id = ?`)
+    .bind(exportId)
+    .first<Record<string, unknown>>();
+
+  return row ? toExportRecord(row) : null;
+}
+
+export async function listExportRecordsForRun(
+  env: Env,
+  scanRunId: string,
+  limit = 12,
+): Promise<PersistedExportRecord[]> {
+  const result = await env.EDGE_DB.prepare(
+    `SELECT * FROM scan_exports
+     WHERE scan_run_id = ?
+     ORDER BY created_at DESC
+     LIMIT ?`,
+  )
+    .bind(scanRunId, limit)
+    .all<Record<string, unknown>>();
+
+  return (result.results ?? []).map(toExportRecord);
 }
 
 export async function createProviderSetting(

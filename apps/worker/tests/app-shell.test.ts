@@ -19,5 +19,9 @@ describe("provider control plane app shell", () => {
     expect(markup).toContain('id="clear-provider-secret"');
     expect(markup).toContain("Run test");
     expect(markup).toContain("Save provider");
+    expect(markup).toContain('href="/app"');
+    expect(markup).toContain('href="/app/scans"');
+    expect(markup).toContain('href="/app/exports"');
+    expect(markup).toContain('href="/app/tunnels#route-form"');
   });
 });

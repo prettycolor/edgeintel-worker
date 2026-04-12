@@ -241,7 +241,7 @@ npm run remote:activate --workspace @edgeintel/worker -- https://<edgeintel-host
 
 ## 8. Full Operator App Setup
 
-To use `/app/providers` and `/app/tunnels` remotely, protect the app with
+To use `/app`, `/app/providers`, `/app/scans`, `/app/exports`, and `/app/tunnels` remotely, protect the app with
 Cloudflare Access.
 
 ### Recommended pattern

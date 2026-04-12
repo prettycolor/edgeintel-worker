@@ -45,7 +45,10 @@ Legacy smoke/fallback hostname during rollout: `https://edgeintel-worker.care-83
   - `POST /register`
   - `GET /.well-known/oauth-authorization-server`
   - `GET /.well-known/oauth-protected-resource/mcp`
-- `GET /app` and `GET /app/providers` for the current Worker-served provider control-plane UI
+- `GET /app` for the authenticated operator overview
+- `GET /app/providers` for the current Worker-served provider control-plane UI
+- `GET /app/scans` for the Worker-served scan operations workspace
+- `GET /app/exports` for the Worker-served export studio
 - `GET /app/tunnels` for the current Worker-served tunnel and local-model wizard workspace
 - `POST /api/scans/:scanRunId/ai-brief` to generate an evidence-bounded AI
   brief from persisted findings and recommendations
@@ -105,7 +108,8 @@ Legacy smoke/fallback hostname during rollout: `https://edgeintel-worker.care-83
   - suffix-based hostname matching and inline DNS conflict validation
   - proxied DNS CNAME management to `<tunnel-id>.cfargotunnel.com`
   - optional Access reusable policy, service token, and self-hosted app creation
-  - Access-first app auth for `/app`, `/app/providers`, `/app/tunnels`, and
+  - Access-first app auth for `/app`, `/app/providers`, `/app/scans`,
+    `/app/exports`, `/app/tunnels`, and
     secret-bearing tunnel/provider APIs
   - one-time pairing sessions so raw tunnel bootstrap is no longer returned by
     ordinary tunnel detail APIs

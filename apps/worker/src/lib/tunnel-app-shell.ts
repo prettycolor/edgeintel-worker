@@ -1224,9 +1224,21 @@ export function renderTunnelControlPlaneApp(config: TunnelAppConfig): string {
             </div>
 
             <nav class="nav-group">
+              <a class="nav-item" href="/app">
+                <span>Overview</span>
+                <span class="badge">live</span>
+              </a>
               <a class="nav-item" href="/app/providers">
                 <span>Provider control plane</span>
                 <span class="badge">API</span>
+              </a>
+              <a class="nav-item" href="/app/scans">
+                <span>Scans</span>
+                <span class="badge">ops</span>
+              </a>
+              <a class="nav-item" href="/app/exports">
+                <span>Exports</span>
+                <span class="badge">brief</span>
               </a>
               <a class="nav-item active" href="/app/tunnels">
                 <span>Local model routes</span>

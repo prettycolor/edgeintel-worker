@@ -1516,22 +1516,22 @@ export function renderProviderControlPlaneApp(
 
           <div class="nav-group">
             <div class="nav-meta">Workspace</div>
-            <div class="nav-item">
+            <a class="nav-item" href="/app" style="text-decoration:none">
               Overview
               <span class="badge">core</span>
-            </div>
-            <div class="nav-item active">
+            </a>
+            <a class="nav-item active" href="/app/providers" style="text-decoration:none">
               AI connectivity
               <span class="badge">live</span>
-            </div>
-            <div class="nav-item">
+            </a>
+            <a class="nav-item" href="/app/scans" style="text-decoration:none">
               Scans
-              <span class="badge">api</span>
-            </div>
-            <div class="nav-item">
+              <span class="badge">ops</span>
+            </a>
+            <a class="nav-item" href="/app/exports" style="text-decoration:none">
               Exports
-              <span class="badge">ready</span>
-            </div>
+              <span class="badge">live</span>
+            </a>
           </div>
 
           <div class="nav-group">
@@ -1540,9 +1540,18 @@ export function renderProviderControlPlaneApp(
               Tunnel orchestration
               <span class="badge">live</span>
             </a>
-            <div class="nav-item">Connector pairing</div>
-            <div class="nav-item">Local wizard</div>
-            <div class="nav-item">Health history</div>
+            <a class="nav-item" href="/app/tunnels#route-pairing-output" style="text-decoration:none">
+              Connector pairing
+              <span class="badge">route</span>
+            </a>
+            <a class="nav-item" href="/app/tunnels#route-form" style="text-decoration:none">
+              Local wizard
+              <span class="badge">wizard</span>
+            </a>
+            <a class="nav-item" href="/app/tunnels#route-observability" style="text-decoration:none">
+              Health history
+              <span class="badge">obs</span>
+            </a>
           </div>
 
           <div class="sidebar-footer">

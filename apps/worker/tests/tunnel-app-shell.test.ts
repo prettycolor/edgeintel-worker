@@ -23,5 +23,8 @@ describe("tunnel control plane app shell", () => {
     expect(markup).toContain("Scoped handoff to the local agent");
     expect(markup).toContain("Rotate bootstrap");
     expect(markup).toContain("Save route");
+    expect(markup).toContain('href="/app"');
+    expect(markup).toContain('href="/app/scans"');
+    expect(markup).toContain('href="/app/exports"');
   });
 });

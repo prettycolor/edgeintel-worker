@@ -61,7 +61,7 @@ export async function handleMcpAccessRequest(
     } catch (error) {
       return oauthError(
         error instanceof Error ? error.message : "Failed to start MCP authorization.",
-        500,
+        400,
       );
     }
   }

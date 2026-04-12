@@ -640,6 +640,17 @@ export interface PersistedPairingSession {
   updatedAt: string;
 }
 
+export interface PersistedExportRecord {
+  id: string;
+  scanRunId: string;
+  format: ExportFormat;
+  status: string;
+  objectKey: string;
+  contentType: string;
+  payloadJson: string;
+  createdAt: string;
+}
+
 export interface PairingSessionView {
   id: string;
   tunnelId: string;

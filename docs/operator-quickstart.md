@@ -24,20 +24,25 @@ to finish the remote activation phase.
 
 Current app surfaces:
 
+- `/app`
 - `/app/providers`
+- `/app/scans`
+- `/app/exports`
 - `/app/tunnels`
 
-Current scan and report flows are still primarily API-driven:
+Current scan and report flows are now available in the app shell and through the API:
 
 - `POST /api/scan`
+- `GET /api/scans/recent`
 - `GET /api/jobs/:jobId`
 - `GET /api/domains/:domain/latest`
 - `GET /api/scans/:scanRunId/commercial-brief`
+- `GET /api/scans/:scanRunId/exports`
 - `POST /api/exports/:scanRunId`
 
-That means the provider and tunnel workflows are app-driven today, while the
-scan/report demo is best driven by API calls, curl, or a simple API client once
-you are either:
+That means the provider, scan, export, and tunnel workflows all have a Worker-served
+operator surface now, while the APIs remain the source-of-truth for automation,
+curl-driven demos, and local debugging once you are either:
 
 - on local development with the deliberate localhost bypass, or
 - behind Cloudflare Access on the deployed host
@@ -80,6 +85,14 @@ until the paired machine runs the connector and `cloudflared`.
 6. Confirm the tunnel heartbeat and connection test in `/app/tunnels`.
 
 ## 4. Run A Scan
+
+### App path
+
+1. Open `/app/scans`.
+2. Enter the domain.
+3. Create the scan job.
+4. Wait for the selected run to settle.
+5. Review findings, recommendations, and the commercial brief in the same page.
 
 ### Local development path
 
@@ -135,6 +148,13 @@ curl "http://127.0.0.1:8787/api/scans/<scan-run-id>/commercial-brief?format=mark
 ```
 
 ## 8. Create An Export
+
+### App path
+
+1. Open `/app/exports` or use the export section inside `/app/scans`.
+2. Select the scan run.
+3. Choose the output format.
+4. Download the generated artifact from the export list.
 
 Markdown:
 

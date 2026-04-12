@@ -30,6 +30,8 @@ import {
   insertArtifact,
   insertTunnelEvent,
   insertTunnelTestRun,
+  listExportRecordsForRun,
+  listRecentScanRuns,
   listProviderSettings,
   listTunnelEvents,
   listTunnelRecords,
@@ -108,6 +110,10 @@ import {
 import { renderProviderControlPlaneApp } from "./lib/app-shell";
 import { renderTunnelControlPlaneApp } from "./lib/tunnel-app-shell";
 import {
+  renderScanWorkspaceApp,
+  renderWorkspaceOverviewApp,
+} from "./lib/workspace-app-shell";
+import {
   normalizePairingCreateInput,
   normalizePairingExchangeInput,
   normalizeTunnelHeartbeatInput,
@@ -129,13 +135,16 @@ import type {
   ExportFormat,
   HostnameValidationRequestBody,
   OperatorSession,
+  PersistedExportRecord,
   PersistedProviderSetting,
+  PersistedScanRun,
   PairingCreateRequestBody,
   PairingExchangeRequestBody,
   ProviderSettingsRequestBody,
   ProviderTestRequestBody,
   ScanQueueMessage,
   ScanRequestBody,
+  ScanSummary,
   ScanWorkflowParams,
   TunnelSettingsRequestBody,
   TunnelHeartbeatRequestBody,
@@ -453,6 +462,45 @@ function serializeScanContext(
   };
 }
 
+function summarizeScanRun(run: PersistedScanRun) {
+  const summary = safeJsonParse<Partial<ScanSummary>>(run.scanSummaryJson, {});
+  const rawResult = safeJsonParse<Record<string, unknown>>(run.rawResultJson, {});
+  const findings = Array.isArray(rawResult.findings) ? rawResult.findings : [];
+  const recommendations = Array.isArray(rawResult.recommendations)
+    ? rawResult.recommendations
+    : [];
+  const failedModules =
+    rawResult.modules && typeof rawResult.modules === "object"
+      ? Object.entries(rawResult.modules as Record<string, unknown>)
+          .filter(
+            ([, value]) =>
+              typeof value === "object" &&
+              value !== null &&
+              "ok" in value &&
+              (value as { ok: boolean }).ok === false,
+          )
+          .map(([name]) => name)
+      : [];
+
+  return {
+    run,
+    summary,
+    metrics: {
+      findingCount: findings.length,
+      recommendationCount: recommendations.length,
+      failedModules,
+    },
+  };
+}
+
+function serializeExportRecord(record: PersistedExportRecord) {
+  return {
+    ...record,
+    payload: safeJsonParse<Record<string, unknown>>(record.payloadJson, {}),
+    downloadUrl: `/api/exports/${record.id}?download=1`,
+  };
+}
+
 async function handleGetScan(env: Env, scanRunId: string): Promise<Response> {
   const scanContext = await getScanContext(env, scanRunId);
   if (!scanContext) return notFound("Scan run not found.");
@@ -500,6 +548,17 @@ async function handleDomainHistory(env: Env, domainParam: string): Promise<Respo
   });
 }
 
+async function handleRecentScans(request: Request, env: Env): Promise<Response> {
+  const limit = Math.min(
+    25,
+    Math.max(1, Number.parseInt(new URL(request.url).searchParams.get("limit") ?? "12", 10) || 12),
+  );
+  const runs = await listRecentScanRuns(env, limit);
+  return jsonResponse({
+    scans: runs.map((run) => summarizeScanRun(run)),
+  });
+}
+
 async function handleLatestDomain(env: Env, domainParam: string): Promise<Response> {
   let domain: string;
   try {
@@ -520,10 +579,38 @@ async function handleLatestDomain(env: Env, domainParam: string): Promise<Respon
   });
 }
 
+async function handleListExportsForScan(env: Env, scanRunId: string): Promise<Response> {
+  const scanRun = await getScanRun(env, scanRunId);
+  if (!scanRun) return notFound("Scan run not found.");
+
+  const exports = await listExportRecordsForRun(env, scanRunId, 16);
+  return jsonResponse({
+    scanRun: summarizeScanRun(scanRun),
+    exports: exports.map((record) => serializeExportRecord(record)),
+  });
+}
+
 async function handleInferenceCapabilities(env: Env): Promise<Response> {
   return jsonResponse({
     inference: getInferenceCapabilities(env),
   });
+}
+
+function handleWorkspaceOverview(): Response {
+  return new Response(
+    renderWorkspaceOverviewApp({
+      sessionEndpoint: "/api/session",
+      providersEndpoint: "/api/settings/providers",
+      tunnelsEndpoint: "/api/tunnels",
+      recentScansEndpoint: "/api/scans/recent",
+    }),
+    {
+      headers: {
+        "content-type": "text/html; charset=utf-8",
+        "cache-control": "no-store",
+      },
+    },
+  );
 }
 
 function handleProviderControlPlaneApp(): Response {
@@ -531,6 +618,25 @@ function handleProviderControlPlaneApp(): Response {
     renderProviderControlPlaneApp({
       providersEndpoint: "/api/settings/providers",
       providerCatalogEndpoint: "/api/settings/provider-catalog",
+    }),
+    {
+      headers: {
+        "content-type": "text/html; charset=utf-8",
+        "cache-control": "no-store",
+      },
+    },
+  );
+}
+
+function handleScanWorkspaceApp(initialView?: "scans" | "exports"): Response {
+  return new Response(
+    renderScanWorkspaceApp({
+      createScanEndpoint: "/api/scan",
+      recentScansEndpoint: "/api/scans/recent",
+      scanEndpointBase: "/api/scans",
+      domainEndpointBase: "/api/domains",
+      exportEndpointBase: "/api/exports",
+      initialView,
     }),
     {
       headers: {
@@ -1836,23 +1942,19 @@ async function handleGetExport(request: Request, env: Env, exportId: string): Pr
   if (!exportRecord) return notFound("Export not found.");
 
   if (new URL(request.url).searchParams.get("download") === "1") {
-    const objectKey = String(exportRecord.object_key);
+    const objectKey = exportRecord.objectKey;
     const object = await env.EDGE_ARTIFACTS.get(objectKey);
     if (!object) return notFound("Export artifact missing from storage.");
 
     return new Response(object.body, {
       headers: {
-        "content-type": String(exportRecord.content_type),
+        "content-type": exportRecord.contentType,
         "content-disposition": `attachment; filename="${objectKey.split("/").pop()}"`,
       },
     });
   }
 
-  return jsonResponse({
-    ...exportRecord,
-    payload: JSON.parse(String(exportRecord.payload_json)),
-    downloadUrl: `/api/exports/${exportId}?download=1`,
-  });
+  return jsonResponse(serializeExportRecord(exportRecord));
 }
 
 async function processScanMessage(env: Env, message: ScanQueueMessage): Promise<void> {
@@ -1973,8 +2075,20 @@ export class EdgeIntelAppHandler extends WorkerEntrypoint<Env> {
       operatorSession = session;
     }
 
-    if (request.method === "GET" && (path === "/app" || path === "/app/providers")) {
+    if (request.method === "GET" && path === "/app") {
+      return handleWorkspaceOverview();
+    }
+
+    if (request.method === "GET" && path === "/app/providers") {
       return handleProviderControlPlaneApp();
+    }
+
+    if (request.method === "GET" && path === "/app/scans") {
+      return handleScanWorkspaceApp("scans");
+    }
+
+    if (request.method === "GET" && path === "/app/exports") {
+      return handleScanWorkspaceApp("exports");
     }
 
     if (request.method === "GET" && path === "/app/tunnels") {
@@ -1997,6 +2111,10 @@ export class EdgeIntelAppHandler extends WorkerEntrypoint<Env> {
       return handleCreateScan(request, this.env);
     }
 
+    if (request.method === "GET" && path === "/api/scans/recent") {
+      return handleRecentScans(request, this.env);
+    }
+
     if (request.method === "GET" && /^\/api\/jobs\/[^/]+$/.test(path)) {
       return handleGetJob(this.env, path.split("/")[3]);
     }
@@ -2008,6 +2126,10 @@ export class EdgeIntelAppHandler extends WorkerEntrypoint<Env> {
 
     if (request.method === "GET" && /^\/api\/scans\/[^/]+$/.test(path)) {
       return handleGetScan(this.env, path.split("/")[3]);
+    }
+
+    if (request.method === "GET" && /^\/api\/scans\/[^/]+\/exports$/.test(path)) {
+      return handleListExportsForScan(this.env, path.split("/")[3]);
     }
 
     if (request.method === "GET" && /^\/api\/scans\/[^/]+\/commercial-brief$/.test(path)) {
