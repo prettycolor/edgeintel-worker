@@ -261,6 +261,8 @@ npm run remote:activate --workspace @edgeintel/worker -- https://edgeintel.app
 ```
 
 The script only writes variables that are actually set in the shell.
+It also unsets `CLOUDFLARE_API_TOKEN` for Wrangler subprocesses so your
+in-app control-plane token does not collide with Wrangler's own authentication.
 
 ## 8. Re-Run The Gate
 

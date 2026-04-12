@@ -84,7 +84,7 @@ echo "Base URL: $BASE_URL"
 section "Worker Secrets"
 
 SECRETS_JSON="[]"
-if secrets_output="$(npx wrangler secret list --format json 2>/dev/null)"; then
+if secrets_output="$(env -u CLOUDFLARE_API_TOKEN npx wrangler secret list --format json 2>/dev/null)"; then
   SECRETS_JSON="$secrets_output"
 else
   yellow "Could not enumerate Worker secrets via Wrangler. The Worker may not be deployed yet."

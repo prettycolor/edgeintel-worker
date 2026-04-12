@@ -70,7 +70,7 @@ write_secret() {
     return 1
   fi
 
-  printf '%s' "$value" | npx wrangler secret put "$name" >/dev/null
+  printf '%s' "$value" | env -u CLOUDFLARE_API_TOKEN npx wrangler secret put "$name" >/dev/null
   green "set $name"
   return 0
 }
